@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-const API_URL = "https://198.23.206.54"; // Remove port 443, let browser handle it
+const API_URL = "http://198.23.206.54";
 const GET_SETTINGS_URL = `${API_URL}/getsettings`;
 const SAVE_SETTINGS_URL = `${API_URL}/savesettings`;
 
