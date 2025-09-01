@@ -1,0 +1,17 @@
+[
+    {
+      "id": "real",
+      "name": "Real Trading Account",
+      "path": "C:\\Users\\Administrator\\Desktop\\Aitrading\\Aitrading",
+      "description": "Live trading account for real money",
+      "enabled": true
+    },
+    {
+      "id": "test",
+      "name": "Test Trading Account",
+      "path": "C:\\Users\\Administrator\\Desktop\\Aitrading\\Aitrading - Test",
+      "description": "Test account for strategy testing and development",
+      "enabled": true
+    }
+  ]
+  

@@ -1,221 +1,745 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
-// Mock data for accounts
-const mockAccounts = [
-  {
-    id: "acc1",
-    name: "Account 1",
-    generalSettings: {
-      risk: "Medium",
-      mode: "Auto",
-      telegram: "@trader1",
-      maxDrawdown: 10,
-      stopLoss: 5,
-      takeProfit: 15,
-    },
-  },
-  {
-    id: "acc2",
-    name: "Account 2",
-    generalSettings: {
-      risk: "High",
-      mode: "Manual",
-      telegram: "@trader2",
-      maxDrawdown: 20,
-      stopLoss: 10,
-      takeProfit: 25,
-    },
-  },
-];
+const API_URL = "http://198.23.206.54";
+const GET_SETTINGS_URL = `${API_URL}/getsettings`;
+const SAVE_SETTINGS_URL = `${API_URL}/savesettings`;
 
-type Account = typeof mockAccounts[number];
-type GeneralSettings = Account["generalSettings"];
+type Settings = {
+  auto_trade: boolean;
+  channel_listener: boolean;
+  webhook_enabled: boolean;
+  risk_percentage: number;
+  lot_size: number;
+  default_sl_pips: number;
+  risk_reward_ratio: number;
+  trading_hours: {
+    start: number;
+    end: number;
+  };
+  algo_trading: {
+    enabled: boolean;
+    interval_minutes: number;
+    interval_seconds: number;
+    lot_mode: string;
+    daily_profit_target: number;
+    static_lot_size: number;
+    sleep_time: number;
+  };
+  hft_trading: {
+    enabled: boolean;
+  };
+  trade_secure: {
+    enabled: boolean;
+  };
+  trade_monitoring: {
+    enabled: boolean;
+    check_interval: number;
+    profit_lock_distance: number;
+  };
+  profit_secure: {
+    enabled: boolean;
+    mode: string;
+    initial_target_percentage: number;
+    initial_target_usd: number;
+    margin_percentage: number;
+    margin_usd: number;
+    check_interval: number;
+    max_loss_enabled: boolean;
+    max_loss_percentage: number;
+    max_loss_usd: number;
+    chat_id: string;
+  };
+  data_logger: {
+    enabled: boolean;
+    webhook_log: boolean;
+    mt5_handler_log: boolean;
+    trade_monitor_log: boolean;
+    position_manager_log: boolean;
+    message_sender_log: boolean;
+  };
+};
 
 export default function SettingsPage() {
-  const [accounts, setAccounts] = useState<Account[]>(mockAccounts);
-  const [selectedId, setSelectedId] = useState<string>(accounts[0].id);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
-  const selectedAccount = accounts.find((acc) => acc.id === selectedId)!;
+  useEffect(() => {
+    fetchSettings();
+  }, []);
 
-  const handleAccountChange = (id: string) => {
-    setSelectedId(id);
+  const fetchSettings = async () => {
+    try {
+      console.log("Fetching settings from:", GET_SETTINGS_URL);
+      
+      const response = await fetch(GET_SETTINGS_URL, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+      });
+
+      console.log("Response status:", response.status);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Settings data:", data);
+      
+      setSettings(data);
+      setError(null);
+    } catch (err: any) {
+      console.error("Error fetching settings:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSettingChange = (field: keyof GeneralSettings, value: string | number) => {
-    setAccounts((prev) =>
-      prev.map((acc) =>
-        acc.id === selectedId
-          ? { ...acc, generalSettings: { ...acc.generalSettings, [field]: value } }
-          : acc
-      )
-    );
+  const saveSettings = async (settingsToSave: Settings) => {
+    try {
+      console.log("Saving settings:", settingsToSave);
+
+      const response = await fetch(SAVE_SETTINGS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settingsToSave),
+        mode: 'cors',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("Save response:", result);
+      
+      return result;
+    } catch (err: any) {
+      console.error("Error saving settings:", err);
+      throw err;
+    }
   };
 
-  const handleSave = () => {
-    // Here you would typically send the settings to your backend API
-    console.log("Saving settings for account:", selectedId, selectedAccount.generalSettings);
-    alert("Settings saved successfully!");
+  const handleToggleChange = async (key: string, value: boolean) => {
+    if (!settings) return;
+
+    try {
+      const updatedSettings = { ...settings };
+      
+      // Handle nested objects
+      if (key.includes('.')) {
+        const [parent, child] = key.split('.');
+        (updatedSettings as any)[parent] = {
+          ...(updatedSettings as any)[parent],
+          [child]: value
+        };
+      } else {
+        (updatedSettings as any)[key] = value;
+      }
+
+      setSettings(updatedSettings);
+      await saveSettings(updatedSettings);
+      setSaveMessage("Settings saved successfully!");
+      setTimeout(() => setSaveMessage(null), 3000);
+    } catch (err) {
+      console.error("Error updating toggle:", err);
+      setSaveMessage("Error saving settings");
+      setTimeout(() => setSaveMessage(null), 3000);
+    }
   };
+
+  const handleNumberChange = (key: string, value: number) => {
+    if (!settings) return;
+
+    const updatedSettings = { ...settings };
+    
+    // Handle nested objects
+    if (key.includes('.')) {
+      const [parent, child] = key.split('.');
+      (updatedSettings as any)[parent] = {
+        ...(updatedSettings as any)[parent],
+        [child]: value
+      };
+    } else {
+      (updatedSettings as any)[key] = value;
+    }
+
+    setSettings(updatedSettings);
+  };
+
+  const handleManualSave = async () => {
+    if (!settings) return;
+
+    setSaving(true);
+    try {
+      await saveSettings(settings);
+      setSaveMessage("Settings saved successfully!");
+      setTimeout(() => setSaveMessage(null), 3000);
+    } catch (err) {
+      console.error("Error saving settings:", err);
+      setSaveMessage("Error saving settings");
+      setTimeout(() => setSaveMessage(null), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const ToggleButton = ({ 
+    checked, 
+    onChange, 
+    label 
+  }: { 
+    checked: boolean; 
+    onChange: (checked: boolean) => void; 
+    label: string; 
+  }) => (
+    <div className="flex items-center justify-between">
+      <label className="font-medium text-sm text-gray-300">{label}:</label>
+      <button
+        className={`w-10 h-6 rounded-full flex items-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+          checked ? "bg-blue-600" : "bg-gray-600"
+        }`}
+        onClick={() => onChange(!checked)}
+        aria-label={`Toggle ${label}`}
+        tabIndex={0}
+      >
+        <span
+          className={`inline-block w-4 h-4 rounded-full bg-white shadow transform transition-transform ${
+            checked ? "translate-x-5" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 p-4 sm:p-8">
+    <div className="min-h-screen bg-gray-900 p-4">
       <div className="max-w-4xl mx-auto">
-        <div className="flex flex-col sm:flex-row gap-8">
-          {/* Account Selection Sidebar */}
-          <aside className="w-full sm:w-64 flex-shrink-0">
-            <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4">
-              <h2 className="text-lg font-semibold mb-4">Select Account</h2>
-              <div className="flex flex-col gap-2">
-                {accounts.map((acc) => (
-                  <button
-                    key={acc.id}
-                    className={`w-full text-left px-4 py-2 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      acc.id === selectedId
-                        ? "bg-blue-600 text-white dark:bg-blue-500"
-                        : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    }`}
-                    onClick={() => handleAccountChange(acc.id)}
-                    aria-label={`Select ${acc.name}`}
-                    tabIndex={0}
-                  >
-                    {acc.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </aside>
-
-          {/* Settings Form */}
-          <main className="flex-1">
-            <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold">{selectedAccount.name} - General Settings</h1>
-                <button
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  onClick={handleSave}
-                  aria-label="Save settings"
-                  tabIndex={0}
-                >
-                  Save Settings
-                </button>
-              </div>
-
-              <form className="space-y-6">
-                {/* Trading Settings */}
-                <section>
-                  <h3 className="text-lg font-semibold mb-4 text-blue-600 dark:text-blue-400">Trading Settings</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label className="flex flex-col gap-2">
-                      <span className="font-medium">Risk Level</span>
-                      <select
-                        className="rounded border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={selectedAccount.generalSettings.risk}
-                        onChange={(e) => handleSettingChange("risk", e.target.value)}
-                        aria-label="Risk level"
-                      >
-                        <option value="Low">Low</option>
-                        <option value="Medium">Medium</option>
-                        <option value="High">High</option>
-                      </select>
-                    </label>
-
-                    <label className="flex flex-col gap-2">
-                      <span className="font-medium">Trading Mode</span>
-                      <select
-                        className="rounded border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={selectedAccount.generalSettings.mode}
-                        onChange={(e) => handleSettingChange("mode", e.target.value)}
-                        aria-label="Trading mode"
-                      >
-                        <option value="Manual">Manual</option>
-                        <option value="Auto">Auto</option>
-                        <option value="Semi-Auto">Semi-Auto</option>
-                      </select>
-                    </label>
-                  </div>
-                </section>
-
-                {/* Risk Management */}
-                <section>
-                  <h3 className="text-lg font-semibold mb-4 text-green-600 dark:text-green-400">Risk Management</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <label className="flex flex-col gap-2">
-                      <span className="font-medium">Max Drawdown (%)</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="50"
-                        className="rounded border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={selectedAccount.generalSettings.maxDrawdown}
-                        onChange={(e) => handleSettingChange("maxDrawdown", Number(e.target.value))}
-                        aria-label="Maximum drawdown percentage"
-                      />
-                    </label>
-
-                    <label className="flex flex-col gap-2">
-                      <span className="font-medium">Stop Loss (%)</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="20"
-                        className="rounded border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={selectedAccount.generalSettings.stopLoss}
-                        onChange={(e) => handleSettingChange("stopLoss", Number(e.target.value))}
-                        aria-label="Stop loss percentage"
-                      />
-                    </label>
-
-                    <label className="flex flex-col gap-2">
-                      <span className="font-medium">Take Profit (%)</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        className="rounded border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={selectedAccount.generalSettings.takeProfit}
-                        onChange={(e) => handleSettingChange("takeProfit", Number(e.target.value))}
-                        aria-label="Take profit percentage"
-                      />
-                    </label>
-                  </div>
-                </section>
-
-                {/* Notifications */}
-                <section>
-                  <h3 className="text-lg font-semibold mb-4 text-purple-600 dark:text-purple-400">Notifications</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label className="flex flex-col gap-2">
-                      <span className="font-medium">Telegram Channel</span>
-                      <input
-                        type="text"
-                        className="rounded border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={selectedAccount.generalSettings.telegram}
-                        onChange={(e) => handleSettingChange("telegram", e.target.value)}
-                        placeholder="@channel_name"
-                        aria-label="Telegram channel"
-                      />
-                    </label>
-
-                    <label className="flex flex-col gap-2">
-                      <span className="font-medium">Email Notifications</span>
-                      <select
-                        className="rounded border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        aria-label="Email notification preference"
-                      >
-                        <option value="all">All Notifications</option>
-                        <option value="trades">Trade Notifications Only</option>
-                        <option value="errors">Error Notifications Only</option>
-                        <option value="none">No Email Notifications</option>
-                      </select>
-                    </label>
-                  </div>
-                </section>
-              </form>
-            </div>
-          </main>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
+          <h1 className="text-3xl font-bold text-white">General Settings</h1>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Link 
+              href="/" 
+              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+            >
+              Back to Dashboard
+            </Link>
+            <button 
+              onClick={fetchSettings} 
+              disabled={loading} 
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
         </div>
+
+        {/* Loading State */}
+        {loading && (
+          <div className="bg-gray-800 border border-gray-700 rounded-lg shadow p-8 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-2 text-gray-400">Loading settings...</p>
+          </div>
+        )}
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-900/50 border border-red-700 rounded-lg p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-300">Error loading settings</h3>
+                <div className="mt-2 text-sm text-red-400">{error}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save Message */}
+        {saveMessage && (
+          <div className={`mb-6 border rounded-lg p-4 ${
+            saveMessage.includes('Error') 
+              ? 'bg-red-900/50 border-red-700 text-red-300' 
+              : 'bg-green-900/50 border-green-700 text-green-300'
+          }`}>
+            {saveMessage}
+          </div>
+        )}
+
+        {/* Settings Form */}
+        {settings && (
+          <div className="bg-gray-800 border border-gray-700 rounded-lg shadow p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Trading Settings */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-blue-400 border-b border-gray-700 pb-2">Trading Settings</h3>
+                
+                <div className="space-y-4">
+                  <ToggleButton 
+                    checked={settings.auto_trade} 
+                    onChange={(value) => handleToggleChange('auto_trade', value)} 
+                    label="Auto Trade" 
+                  />
+                  
+                  <ToggleButton 
+                    checked={settings.channel_listener} 
+                    onChange={(value) => handleToggleChange('channel_listener', value)} 
+                    label="Channel Listener" 
+                  />
+                  
+                  <ToggleButton 
+                    checked={settings.webhook_enabled} 
+                    onChange={(value) => handleToggleChange('webhook_enabled', value)} 
+                    label="Webhook Enabled" 
+                  />
+                </div>
+              </div>
+
+              {/* Risk Management */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-green-400 border-b border-gray-700 pb-2">Risk Management</h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Risk Percentage (%)</label>
+                    <input
+                      type="number"
+                      value={settings.risk_percentage}
+                      onChange={(e) => handleNumberChange('risk_percentage', Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="1"
+                      max="100"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Lot Size</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={settings.lot_size}
+                      onChange={(e) => handleNumberChange('lot_size', Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="0.01"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Default SL (Pips)</label>
+                    <input
+                      type="number"
+                      value={settings.default_sl_pips}
+                      onChange={(e) => handleNumberChange('default_sl_pips', Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="1"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Risk/Reward Ratio</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={settings.risk_reward_ratio}
+                      onChange={(e) => handleNumberChange('risk_reward_ratio', Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="0.1"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Trading Hours */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-yellow-400 border-b border-gray-700 pb-2">Trading Hours</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Start Hour</label>
+                    <input
+                      type="number"
+                      value={settings.trading_hours.start}
+                      onChange={(e) => handleNumberChange('trading_hours.start', Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="0"
+                      max="23"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">End Hour</label>
+                    <input
+                      type="number"
+                      value={settings.trading_hours.end}
+                      onChange={(e) => handleNumberChange('trading_hours.end', Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="0"
+                      max="23"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Advanced Trading */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-purple-400 border-b border-gray-700 pb-2">Advanced Trading</h3>
+                
+                <div className="space-y-4">
+                  <ToggleButton 
+                    checked={settings.algo_trading?.enabled || false} 
+                    onChange={(value) => handleToggleChange('algo_trading.enabled', value)} 
+                    label="Algo Trading" 
+                  />
+                  
+                  {settings.algo_trading?.enabled && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Interval (Minutes)</label>
+                        <input
+                          type="number"
+                          value={settings.algo_trading?.interval_minutes || 0}
+                          onChange={(e) => handleNumberChange('algo_trading.interval_minutes', Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Interval (Seconds)</label>
+                        <input
+                          type="number"
+                          value={settings.algo_trading?.interval_seconds || 0}
+                          onChange={(e) => handleNumberChange('algo_trading.interval_seconds', Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Lot Mode</label>
+                        <select
+                          value={settings.algo_trading?.lot_mode || 'static'}
+                          onChange={(e) => {
+                            const updatedSettings = { ...settings };
+                            updatedSettings.algo_trading.lot_mode = e.target.value;
+                            setSettings(updatedSettings);
+                          }}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="static">Static</option>
+                          <option value="dynamic">Dynamic</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Daily Profit Target (%)</label>
+                        <input
+                          type="number"
+                          value={settings.algo_trading?.daily_profit_target || 0}
+                          onChange={(e) => handleNumberChange('algo_trading.daily_profit_target', Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Static Lot Size</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={settings.algo_trading?.static_lot_size || 0}
+                          onChange={(e) => handleNumberChange('algo_trading.static_lot_size', Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="0.01"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Sleep Time (Seconds)</label>
+                        <input
+                          type="number"
+                          value={settings.algo_trading?.sleep_time || 0}
+                          onChange={(e) => handleNumberChange('algo_trading.sleep_time', Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="1"
+                        />
+                      </div>
+                    </>
+                  )}
+                  
+                  <ToggleButton 
+                    checked={settings.hft_trading?.enabled || false} 
+                    onChange={(value) => handleToggleChange('hft_trading.enabled', value)} 
+                    label="HFT Trading" 
+                  />
+                  
+                  <ToggleButton 
+                    checked={settings.trade_secure?.enabled || false} 
+                    onChange={(value) => handleToggleChange('trade_secure.enabled', value)} 
+                    label="Trade Secure" 
+                  />
+                </div>
+              </div>
+
+              {/* Trade Monitoring */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-teal-400 border-b border-gray-700 pb-2">Trade Monitoring</h3>
+                
+                <div className="space-y-4">
+                  <ToggleButton 
+                    checked={settings.trade_monitoring?.enabled || false} 
+                    onChange={(value) => handleToggleChange('trade_monitoring.enabled', value)} 
+                    label="Enable Trade Monitoring" 
+                  />
+                  
+                  {settings.trade_monitoring?.enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Check Interval (Seconds)</label>
+                      <input
+                        type="number"
+                        value={settings.trade_monitoring?.check_interval || 0}
+                        onChange={(e) => handleNumberChange('trade_monitoring.check_interval', Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="1"
+                      />
+                    </div>
+                  )}
+                  
+                  {settings.trade_monitoring?.enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Profit Lock Distance (Pips)</label>
+                      <input
+                        type="number"
+                        value={settings.trade_monitoring?.profit_lock_distance || 0}
+                        onChange={(e) => handleNumberChange('trade_monitoring.profit_lock_distance', Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Profit Secure */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-orange-400 border-b border-gray-700 pb-2">Profit Secure</h3>
+                
+                <div className="space-y-4">
+                  <ToggleButton 
+                    checked={settings.profit_secure?.enabled || false} 
+                    onChange={(value) => handleToggleChange('profit_secure.enabled', value)} 
+                    label="Enable Profit Secure" 
+                  />
+                  
+                                     {settings.profit_secure?.enabled && (
+                     <div>
+                       <label className="block text-sm font-medium text-gray-300 mb-1">Mode</label>
+                       <select
+                         value={settings.profit_secure?.mode || 'percentage'}
+                         onChange={(e) => {
+                           const updatedSettings = { ...settings };
+                           updatedSettings.profit_secure.mode = e.target.value;
+                           setSettings(updatedSettings);
+                         }}
+                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                       >
+                         <option value="percentage">Percentage</option>
+                         <option value="usd">USD</option>
+                       </select>
+                     </div>
+                   )}
+                  
+                  {settings.profit_secure?.enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Initial Target</label>
+                      <input
+                        type="number"
+                        value={settings.profit_secure?.initial_target_percentage || 0}
+                        onChange={(e) => handleNumberChange('profit_secure.initial_target_percentage', Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0"
+                      />
+                    </div>
+                  )}
+                  
+                  {settings.profit_secure?.enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Initial Target (USD)</label>
+                      <input
+                        type="number"
+                        value={settings.profit_secure?.initial_target_usd || 0}
+                        onChange={(e) => handleNumberChange('profit_secure.initial_target_usd', Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0"
+                      />
+                    </div>
+                  )}
+                  
+                  {settings.profit_secure?.enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Margin</label>
+                      <input
+                        type="number"
+                        value={settings.profit_secure?.margin_percentage || 0}
+                        onChange={(e) => handleNumberChange('profit_secure.margin_percentage', Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0"
+                      />
+                    </div>
+                  )}
+                  
+                  {settings.profit_secure?.enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Margin (USD)</label>
+                      <input
+                        type="number"
+                        value={settings.profit_secure?.margin_usd || 0}
+                        onChange={(e) => handleNumberChange('profit_secure.margin_usd', Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0"
+                      />
+                    </div>
+                  )}
+                  
+                  {settings.profit_secure?.enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Check Interval (Seconds)</label>
+                      <input
+                        type="number"
+                        value={settings.profit_secure?.check_interval || 0}
+                        onChange={(e) => handleNumberChange('profit_secure.check_interval', Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="1"
+                      />
+                    </div>
+                  )}
+                  
+                  {settings.profit_secure?.enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Max Loss Enabled</label>
+                      <ToggleButton 
+                        checked={settings.profit_secure?.max_loss_enabled || false} 
+                        onChange={(value) => handleToggleChange('profit_secure.max_loss_enabled', value)} 
+                        label="Enable Max Loss" 
+                      />
+                    </div>
+                  )}
+                  
+                  {settings.profit_secure?.max_loss_enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Max Loss Percentage</label>
+                      <input
+                        type="number"
+                        value={settings.profit_secure?.max_loss_percentage || 0}
+                        onChange={(e) => handleNumberChange('profit_secure.max_loss_percentage', Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0"
+                      />
+                    </div>
+                  )}
+                  
+                  {settings.profit_secure?.max_loss_enabled && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Max Loss (USD)</label>
+                      <input
+                        type="number"
+                        value={settings.profit_secure?.max_loss_usd || 0}
+                        onChange={(e) => handleNumberChange('profit_secure.max_loss_usd', Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0"
+                      />
+                    </div>
+                  )}
+                  
+                                     {settings.profit_secure?.enabled && (
+                     <div>
+                       <label className="block text-sm font-medium text-gray-300 mb-1">Chat ID</label>
+                       <input
+                         type="text"
+                         value={settings.profit_secure?.chat_id || ''}
+                         onChange={(e) => {
+                           const updatedSettings = { ...settings };
+                           updatedSettings.profit_secure.chat_id = e.target.value;
+                           setSettings(updatedSettings);
+                         }}
+                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                       />
+                     </div>
+                   )}
+                </div>
+              </div>
+
+              {/* Data Logger */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-purple-400 border-b border-gray-700 pb-2">Data Logger</h3>
+                
+                <div className="space-y-4">
+                  <ToggleButton 
+                    checked={settings.data_logger?.enabled || false} 
+                    onChange={(value) => handleToggleChange('data_logger.enabled', value)} 
+                    label="Enable Data Logger" 
+                  />
+                  
+                  {settings.data_logger?.enabled && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <ToggleButton 
+                        checked={settings.data_logger?.webhook_log || false} 
+                        onChange={(value) => handleToggleChange('data_logger.webhook_log', value)} 
+                        label="Webhook Log" 
+                      />
+                      
+                      <ToggleButton 
+                        checked={settings.data_logger?.mt5_handler_log || false} 
+                        onChange={(value) => handleToggleChange('data_logger.mt5_handler_log', value)} 
+                        label="MT5 Handler Log" 
+                      />
+                      
+                      <ToggleButton 
+                        checked={settings.data_logger?.trade_monitor_log || false} 
+                        onChange={(value) => handleToggleChange('data_logger.trade_monitor_log', value)} 
+                        label="Trade Monitor Log" 
+                      />
+                      
+                      <ToggleButton 
+                        checked={settings.data_logger?.position_manager_log || false} 
+                        onChange={(value) => handleToggleChange('data_logger.position_manager_log', value)} 
+                        label="Position Manager Log" 
+                      />
+                      
+                      <ToggleButton 
+                        checked={settings.data_logger?.message_sender_log || false} 
+                        onChange={(value) => handleToggleChange('data_logger.message_sender_log', value)} 
+                        label="Message Sender Log" 
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {/* Save Button */}
+            <div className="mt-8 flex justify-center">
+              <button 
+                onClick={handleManualSave} 
+                disabled={saving} 
+                className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {saving ? "Saving..." : "Save Number Settings"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

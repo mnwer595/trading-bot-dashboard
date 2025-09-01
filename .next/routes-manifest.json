@@ -45,10 +45,22 @@
       "namedRegex": "^/favicon\\.ico(?:/)?$"
     },
     {
+      "page": "/positions",
+      "regex": "^/positions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/positions(?:/)?$"
+    },
+    {
       "page": "/settings",
       "regex": "^/settings(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/settings(?:/)?$"
+    },
+    {
+      "page": "/symbols",
+      "regex": "^/symbols(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/symbols(?:/)?$"
     },
     {
       "page": "/test",

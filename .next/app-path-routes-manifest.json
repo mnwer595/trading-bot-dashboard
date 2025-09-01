@@ -1,8 +1,10 @@
 {
-  "/favicon.ico/route": "/favicon.ico",
   "/_not-found/page": "/_not-found",
+  "/favicon.ico/route": "/favicon.ico",
   "/page": "/",
+  "/symbols/page": "/symbols",
+  "/experts/page": "/experts",
+  "/positions/page": "/positions",
   "/test/page": "/test",
-  "/settings/page": "/settings",
-  "/experts/page": "/experts"
+  "/settings/page": "/settings"
 }

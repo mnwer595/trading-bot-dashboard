@@ -1,8 +1,10 @@
 {
-  "/favicon.ico/route": "app/favicon.ico/route.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/favicon.ico/route": "app/favicon.ico/route.js",
   "/page": "app/page.js",
+  "/symbols/page": "app/symbols/page.js",
+  "/experts/page": "app/experts/page.js",
+  "/positions/page": "app/positions/page.js",
   "/test/page": "app/test/page.js",
-  "/settings/page": "app/settings/page.js",
-  "/experts/page": "app/experts/page.js"
+  "/settings/page": "app/settings/page.js"
 }

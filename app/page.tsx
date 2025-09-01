@@ -5,7 +5,6 @@ import Link from "next/link";
 
 const API_URL = "http://198.23.206.54";
 const GET_SETTINGS_URL = `${API_URL}/getsettings`;
-const SAVE_SETTINGS_URL = `${API_URL}/savesettings`;
 
 type Settings = {
   auto_trade: boolean;
@@ -22,6 +21,11 @@ type Settings = {
   algo_trading: {
     enabled: boolean;
     interval_minutes: number;
+    interval_seconds: number;
+    lot_mode: string;
+    daily_profit_target: number;
+    static_lot_size: number;
+    sleep_time: number;
   };
   hft_trading: {
     enabled: boolean;
@@ -29,355 +33,205 @@ type Settings = {
   trade_secure: {
     enabled: boolean;
   };
+  trade_monitoring: {
+    enabled: boolean;
+    check_interval: number;
+    profit_lock_distance: number;
+  };
+  profit_secure: {
+    enabled: boolean;
+    mode: string;
+    initial_target_percentage: number;
+    initial_target_usd: number;
+    margin_percentage: number;
+    margin_usd: number;
+    check_interval: number;
+    max_loss_enabled: boolean;
+    max_loss_percentage: number;
+    max_loss_usd: number;
+    chat_id: string;
+  };
+  data_logger: {
+    enabled: boolean;
+    webhook_log: boolean;
+    mt5_handler_log: boolean;
+    trade_monitor_log: boolean;
+    position_manager_log: boolean;
+    message_sender_log: boolean;
+  };
 };
 
 export default function Home() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchSettings();
-  }, []);
 
   const fetchSettings = async () => {
-    setLoading(true);
-    setError(null);
     try {
-      console.log('Fetching settings from:', GET_SETTINGS_URL);
-      const res = await fetch(GET_SETTINGS_URL, {
+      console.log("Fetching settings from:", GET_SETTINGS_URL);
+      
+      const response = await fetch(GET_SETTINGS_URL, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        mode: 'cors', // Explicitly set CORS mode
+        mode: 'cors',
       });
+
+      console.log("Response status:", response.status);
       
-      console.log('Response status:', res.status);
-      console.log('Response headers:', res.headers);
-      
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('API Error:', errorText);
-        throw new Error(`Failed to fetch settings: ${res.status} ${errorText}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const data = await response.json();
+      console.log("Settings data:", data);
       
-      const data = await res.json();
-      console.log('Settings data:', data);
       setSettings(data);
+      setError(null);
     } catch (err: any) {
-      console.error('Fetch error:', err);
-      setError(err.message || "Unknown error");
+      console.error("Error fetching settings:", err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const saveSettings = async (settingsToSave: Settings) => {
-    setSaving(true);
-    setSaveMessage(null);
-    setError(null);
-    
-    try {
-      console.log('Saving settings to:', SAVE_SETTINGS_URL);
-      const res = await fetch(SAVE_SETTINGS_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        mode: 'cors', // Explicitly set CORS mode
-        body: JSON.stringify(settingsToSave),
-      });
-      
-      console.log('Save response status:', res.status);
-      
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('Save API Error:', errorText);
-        throw new Error(`Failed to save settings: ${res.status} ${errorText}`);
-      }
-      
-      setSaveMessage("Settings saved successfully!");
-      setTimeout(() => setSaveMessage(null), 3000);
-    } catch (err: any) {
-      console.error('Save error:', err);
-      setError(err.message || "Failed to save settings");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleToggleChange = async (key: string, value: boolean) => {
-    if (!settings) return;
-    
-    let newSettings: Settings;
-    
-    if (key.includes('.')) {
-      const [parent, child] = key.split('.');
-      newSettings = {
-        ...settings,
-        [parent]: {
-          ...(settings as any)[parent],
-          [child]: value
-        }
-      };
-    } else {
-      newSettings = {
-        ...settings,
-        [key]: value
-      };
-    }
-    
-    setSettings(newSettings);
-    await saveSettings(newSettings);
-  };
-
-  const handleNumberChange = (key: string, value: number) => {
-    if (!settings) return;
-    
-    if (key.includes('.')) {
-      const [parent, child] = key.split('.');
-      setSettings({
-        ...settings,
-        [parent]: {
-          ...(settings as any)[parent],
-          [child]: value
-        }
-      });
-    } else {
-      setSettings({
-        ...settings,
-        [key]: value
-      });
-    }
-  };
-
-  const handleManualSave = async () => {
-    if (!settings) return;
-    await saveSettings(settings);
-  };
-
-  const ToggleButton = ({ 
-    checked, 
-    onChange, 
-    label 
-  }: { 
-    checked: boolean; 
-    onChange: (checked: boolean) => void; 
-    label: string; 
-  }) => (
-    <div className="flex items-center justify-between">
-      <label className="font-medium">{label}:</label>
-      <button
-        className={`w-12 h-6 rounded-full flex items-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-          checked ? "bg-blue-600" : "bg-zinc-300 dark:bg-zinc-700"
-        }`}
-        onClick={() => onChange(!checked)}
-        aria-label={`Toggle ${label}`}
-        tabIndex={0}
-      >
-        <span
-          className={`inline-block w-5 h-5 rounded-full bg-white shadow transform transition-transform ${
-            checked ? "translate-x-6" : "translate-x-1"
-          }`}
-        />
-      </button>
-    </div>
-  );
+  useEffect(() => {
+    fetchSettings();
+  }, []);
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Account Settings</h1>
-          <div className="flex gap-2">
-            <Link
-              href="/experts"
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              Manage Experts
-            </Link>
-            <button
-              onClick={fetchSettings}
-              disabled={loading}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
-            >
-              {loading ? "Loading..." : "Refresh"}
-            </button>
-          </div>
+    <div className="min-h-screen bg-gray-900 p-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Trading Bot Dashboard</h1>
+          <p className="text-xl text-gray-400">Monitor and control your trading operations</p>
         </div>
-        
-        {loading && (
-          <div className="flex justify-center items-center h-40">
-            <span className="text-lg">Loading...</span>
-          </div>
-        )}
-        
-        {error && (
-          <div className="bg-red-100 text-red-700 p-4 rounded mb-4 text-center">
-            Error: {error}
-          </div>
-        )}
-        
-        {saveMessage && (
-          <div className="bg-green-100 text-green-700 p-4 rounded mb-4 text-center">
-            {saveMessage}
-          </div>
-        )}
-        
-        {settings && (
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Trading Settings */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400">Trading Settings</h3>
-                
-                <ToggleButton
-                  checked={settings.auto_trade}
-                  onChange={(value) => handleToggleChange('auto_trade', value)}
-                  label="Auto Trade"
-                />
-                
-                <ToggleButton
-                  checked={settings.channel_listener}
-                  onChange={(value) => handleToggleChange('channel_listener', value)}
-                  label="Channel Listener"
-                />
-                
-                <ToggleButton
-                  checked={settings.webhook_enabled}
-                  onChange={(value) => handleToggleChange('webhook_enabled', value)}
-                  label="Webhook Enabled"
-                />
-                
-                <div>
-                  <label className="block font-medium mb-1">Risk Percentage:</label>
-                  <input
-                    type="number"
-                    value={settings.risk_percentage}
-                    onChange={(e) => handleNumberChange('risk_percentage', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="0"
-                    max="100"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block font-medium mb-1">Lot Size:</label>
-                  <input
-                    type="number"
-                    value={settings.lot_size}
-                    onChange={(e) => handleNumberChange('lot_size', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    step="0.01"
-                    min="0.01"
-                  />
-                </div>
-              </div>
-              
-              {/* Risk Management */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-green-600 dark:text-green-400">Risk Management</h3>
-                
-                <div>
-                  <label className="block font-medium mb-1">Default SL (pips):</label>
-                  <input
-                    type="number"
-                    value={settings.default_sl_pips}
-                    onChange={(e) => handleNumberChange('default_sl_pips', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="1"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block font-medium mb-1">Risk/Reward Ratio:</label>
-                  <input
-                    type="number"
-                    value={settings.risk_reward_ratio}
-                    onChange={(e) => handleNumberChange('risk_reward_ratio', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    step="0.1"
-                    min="0.1"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block font-medium mb-1">Trading Hours Start:</label>
-                  <input
-                    type="number"
-                    value={settings.trading_hours.start}
-                    onChange={(e) => handleNumberChange('trading_hours.start', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="0"
-                    max="23"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block font-medium mb-1">Trading Hours End:</label>
-                  <input
-                    type="number"
-                    value={settings.trading_hours.end}
-                    onChange={(e) => handleNumberChange('trading_hours.end', Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="0"
-                    max="23"
-                  />
-                </div>
-              </div>
-              
-              {/* Advanced Trading */}
-              <div className="space-y-4 md:col-span-2">
-                <h3 className="text-lg font-semibold text-purple-600 dark:text-purple-400">Advanced Trading</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <ToggleButton
-                      checked={settings.algo_trading.enabled}
-                      onChange={(value) => handleToggleChange('algo_trading.enabled', value)}
-                      label="Algo Trading"
-                    />
-                    {settings.algo_trading.enabled && (
-                      <div>
-                        <label className="block text-sm mb-1">Interval (minutes):</label>
-                        <input
-                          type="number"
-                          value={settings.algo_trading.interval_minutes}
-                          onChange={(e) => handleNumberChange('algo_trading.interval_minutes', Number(e.target.value))}
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          min="1"
-                        />
-                      </div>
-                    )}
-                  </div>
-                  
-                  <ToggleButton
-                    checked={settings.hft_trading.enabled}
-                    onChange={(value) => handleToggleChange('hft_trading.enabled', value)}
-                    label="HFT Trading"
-                  />
-                  
-                  <ToggleButton
-                    checked={settings.trade_secure.enabled}
-                    onChange={(value) => handleToggleChange('trade_secure.enabled', value)}
-                    label="Trade Secure"
-                  />
-                </div>
+
+        {/* Status Card */}
+        <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-8 border border-gray-700">
+          <div className="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
+            <div className="flex items-center space-x-4">
+              <div className={`w-4 h-4 rounded-full ${loading ? 'bg-yellow-400' : error ? 'bg-red-400' : 'bg-green-400'}`}></div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Bot Status</h2>
+                <p className="text-sm text-gray-400">
+                  {loading ? 'Connecting...' : error ? 'Connection Error' : 'Connected'}
+                </p>
               </div>
             </div>
-            
-            {/* Manual Save Button for Number Inputs */}
-            <div className="mt-8 flex justify-center">
-              <button
-                onClick={handleManualSave}
-                disabled={saving}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? "Saving..." : "Save Number Settings"}
-              </button>
+            {settings && (
+              <div className="text-center sm:text-right">
+                <p className="text-sm text-gray-400">Auto Trade</p>
+                <p className={`text-lg font-semibold ${settings.auto_trade ? 'text-green-400' : 'text-red-400'}`}>
+                  {settings.auto_trade ? 'ON' : 'OFF'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-900/50 border border-red-700 rounded-lg p-4 mb-8">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-300">Connection Error</h3>
+                <div className="mt-2 text-sm text-red-400">{error}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Main Navigation Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* General Settings Card */}
+          <Link href="/settings" className="group">
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-700 hover:border-gray-600">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="p-2 bg-blue-600 rounded-lg">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">General Settings</h3>
+              <p className="text-gray-400">Configure trading parameters, risk management, and bot behavior</p>
+            </div>
+          </Link>
+
+          {/* Symbol Settings Card */}
+          <Link href="/symbols" className="group">
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-700 hover:border-gray-600">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="p-2 bg-green-600 rounded-lg">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Symbol Settings</h3>
+              <p className="text-gray-400">Configure individual symbol parameters and trading rules</p>
+            </div>
+          </Link>
+
+          {/* Experts Card */}
+          <Link href="/experts" className="group">
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-700 hover:border-gray-600">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="p-2 bg-purple-600 rounded-lg">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Manage Experts</h3>
+              <p className="text-gray-400">Configure and monitor expert advisors and trading strategies</p>
+            </div>
+          </Link>
+
+          {/* Open Positions Card */}
+          <Link href="/positions" className="group">
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-700 hover:border-gray-600">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="p-2 bg-orange-600 rounded-lg">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Open Positions</h3>
+              <p className="text-gray-400">Monitor active trading positions and real-time profit/loss</p>
+            </div>
+          </Link>
+        </div>
+
+        {/* Quick Stats */}
+        {settings && (
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+              <div className="text-sm font-medium text-gray-400">Risk Percentage</div>
+              <div className="text-2xl font-bold text-white">{settings.risk_percentage}%</div>
+            </div>
+            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+              <div className="text-sm font-medium text-gray-400">Lot Size</div>
+              <div className="text-2xl font-bold text-white">{settings.lot_size}</div>
+            </div>
+            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+              <div className="text-sm font-medium text-gray-400">Default SL (Pips)</div>
+              <div className="text-2xl font-bold text-white">{settings.default_sl_pips}</div>
+            </div>
+            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+              <div className="text-sm font-medium text-gray-400">Risk/Reward Ratio</div>
+              <div className="text-2xl font-bold text-white">{settings.risk_reward_ratio}:1</div>
             </div>
           </div>
         )}
