@@ -151,7 +151,7 @@ export default function Home() {
         )}
 
         {/* Main Navigation Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
           {/* General Settings Card */}
           <Link href="/settings" className="group">
             <div className="bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-700 hover:border-gray-600">
@@ -210,6 +210,21 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-semibold text-white mb-2">Open Positions</h3>
               <p className="text-gray-400">Monitor active trading positions and real-time profit/loss</p>
+            </div>
+          </Link>
+
+          {/* Log Monitoring Card */}
+          <Link href="/logs" className="group">
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-700 hover:border-gray-600">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="p-2 bg-indigo-600 rounded-lg">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Log Monitoring</h3>
+              <p className="text-gray-400">Monitor system logs in real-time with advanced filtering</p>
             </div>
           </Link>
         </div>

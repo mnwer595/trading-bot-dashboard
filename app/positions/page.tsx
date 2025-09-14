@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import AccountSelector from "../components/AccountSelector";
 
 const API_URL = "http://198.23.206.54";
 const GET_POSITIONS_URL = `${API_URL}/getpositions`;
@@ -74,6 +75,10 @@ export default function PositionsPage() {
   const [editingValues, setEditingValues] = useState<{ [key: string]: string }>({});
   const [applyingDefaults, setApplyingDefaults] = useState<{ [ticket: number]: boolean }>({});
   const [symbolSettings, setSymbolSettings] = useState<any[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<string>("test");
+  const [showTradingSection, setShowTradingSection] = useState(false);
+  const [tradingOrders, setTradingOrders] = useState<{ [symbol: string]: { orderType: 'buy' | 'sell', volume: string } }>({});
+  const [placingTrade, setPlacingTrade] = useState<{ [symbol: string]: boolean }>({});
 
   const getInputValue = (ticket: number, field: string, defaultValue: number): string => {
     const key = `${ticket}-${field}`;
@@ -117,7 +122,10 @@ export default function PositionsPage() {
       }
 
       // Fetch symbol settings to get defaults for this symbol
-      const response = await fetch(`${API_URL}/getsymbols`, {
+      const url = new URL(`${API_URL}/getsymbols`);
+      url.searchParams.append('account_id', selectedAccount);
+      
+      const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -170,7 +178,10 @@ export default function PositionsPage() {
     try {
       console.log("Fetching symbol settings...");
       
-      const response = await fetch(`${API_URL}/getsymbols`, {
+      const url = new URL(`${API_URL}/getsymbols`);
+      url.searchParams.append('account_id', selectedAccount);
+      
+      const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -196,7 +207,10 @@ export default function PositionsPage() {
     try {
       console.log("Syncing positions with MT5...");
       
-      const response = await fetch(SYNC_POSITIONS_URL, {
+      const url = new URL(SYNC_POSITIONS_URL);
+      url.searchParams.append('account_id', selectedAccount);
+      
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -221,9 +235,12 @@ export default function PositionsPage() {
 
   const fetchPositions = async () => {
     try {
-      console.log("Fetching positions from:", GET_POSITIONS_URL);
+      const url = new URL(GET_POSITIONS_URL);
+      url.searchParams.append('account_id', selectedAccount);
       
-      const response = await fetch(GET_POSITIONS_URL, {
+      console.log("Fetching positions from:", url.toString());
+      
+      const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -357,7 +374,10 @@ export default function PositionsPage() {
       // Also log the full position data to see what we're working with
       console.log("Full position data:", position);
 
-      const response = await fetch(SAVE_POSITIONS_URL, {
+      const url = new URL(SAVE_POSITIONS_URL);
+      url.searchParams.append('account_id', selectedAccount);
+
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -392,7 +412,10 @@ export default function PositionsPage() {
 
       console.log("Closing position:", closeData);
 
-      const response = await fetch(CLOSE_POSITION_URL, {
+      const url = new URL(CLOSE_POSITION_URL);
+      url.searchParams.append('account_id', selectedAccount);
+
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -493,7 +516,105 @@ export default function PositionsPage() {
 
     // Cleanup interval on component unmount
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedAccount]);
+
+  const handleAccountChange = (accountId: string) => {
+    setSelectedAccount(accountId);
+  };
+
+  const initializeTradingOrder = (symbol: string) => {
+    const symbolConfig = symbolSettings.find(s => s.symbol === symbol);
+    const defaultVolume = symbolConfig?.default_lot_size || 0.01;
+    
+    if (!tradingOrders[symbol]) {
+      setTradingOrders(prev => ({
+        ...prev,
+        [symbol]: {
+          orderType: 'buy',
+          volume: defaultVolume.toString()
+        }
+      }));
+    }
+  };
+
+  const handleTradingOrderTypeChange = (symbol: string, orderType: 'buy' | 'sell') => {
+    setTradingOrders(prev => ({
+      ...prev,
+      [symbol]: {
+        ...prev[symbol],
+        orderType
+      }
+    }));
+  };
+
+  const handleTradingVolumeChange = (symbol: string, volume: string) => {
+    setTradingOrders(prev => ({
+      ...prev,
+      [symbol]: {
+        ...prev[symbol],
+        volume
+      }
+    }));
+  };
+
+  const placeTrade = async (symbol: string, orderType?: 'buy' | 'sell') => {
+    const order = tradingOrders[symbol];
+    if (!order) return;
+
+    // Use the provided orderType or fall back to the stored order type
+    const finalOrderType = orderType || order.orderType;
+
+    setPlacingTrade(prev => ({ ...prev, [symbol]: true }));
+
+    try {
+      const url = new URL(`${API_URL}/mt5_request`);
+      url.searchParams.append('account_id', selectedAccount);
+
+      const tradeData = {
+        action: "place_trade",
+        symbol: symbol,
+        order_type: finalOrderType,
+        volume: parseFloat(order.volume),
+        price: 0, // Market order
+        comment: `Manual ${finalOrderType} from dashboard`
+      };
+
+      console.log("Placing trade:", tradeData);
+
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(tradeData),
+        mode: 'cors',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("Trade result:", result);
+
+      if (result.status === 'success' && result.result?.success) {
+        setCloseMessage(`Trade placed successfully! Ticket: ${result.result.ticket}`);
+        setTimeout(() => setCloseMessage(null), 5000);
+        
+        // Refresh positions to show the new trade
+        await fetchPositions();
+      } else {
+        throw new Error(result.error || result.message || 'Trade placement failed');
+      }
+
+    } catch (err: any) {
+      console.error("Error placing trade:", err);
+      setCloseMessage(`Error placing trade: ${err.message}`);
+      setTimeout(() => setCloseMessage(null), 5000);
+    } finally {
+      setPlacingTrade(prev => ({ ...prev, [symbol]: false }));
+    }
+  };
 
   const handleProfitLockChange = async (ticket: number, field: 'profit_lock_enabled' | 'profit_lock_start_pips' | 'profit_lock_distance_pips', value: boolean | number) => {
     setSaving(prev => ({ ...prev, [ticket]: true }));
@@ -701,12 +822,24 @@ export default function PositionsPage() {
                 Real-time monitoring of active trading positions
               </p>
             </div>
-            <Link
-              href="/"
-              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-            >
-              Back to Dashboard
-            </Link>
+            <div className="flex items-center space-x-4">
+              <AccountSelector 
+                selectedAccount={selectedAccount}
+                onAccountChange={handleAccountChange}
+              />
+              <button
+                onClick={() => setShowTradingSection(!showTradingSection)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              >
+                {showTradingSection ? 'Hide Trading' : 'New Trade'}
+              </button>
+              <Link
+                href="/"
+                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+              >
+                Back to Dashboard
+              </Link>
+            </div>
           </div>
           
           {/* Status Bar */}
@@ -733,6 +866,124 @@ export default function PositionsPage() {
             </button>
           </div>
         </div>
+
+        {/* Trading Section */}
+        {showTradingSection && (
+          <div className="mb-6 bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-4">
+            <h3 className="text-lg font-semibold text-white mb-4">Place New Trade</h3>
+            
+            {/* Close Message */}
+            {closeMessage && (
+              <div className={`mb-4 p-3 rounded-lg ${
+                closeMessage.includes('Error') 
+                  ? 'bg-red-900/50 border border-red-700 text-red-300' 
+                  : 'bg-green-900/50 border border-green-700 text-green-300'
+              }`}>
+                {closeMessage}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {symbolSettings.map((symbol) => {
+                const symbolKey = symbol.symbol;
+                initializeTradingOrder(symbolKey);
+                const order = tradingOrders[symbolKey];
+                
+                if (!order) return null;
+
+                return (
+                  <div key={symbolKey} className="bg-gray-700 rounded-lg p-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-3 lg:space-y-0">
+                      {/* Symbol Info */}
+                      <div className="flex items-center space-x-4">
+                        <div>
+                          <h4 className="text-sm font-medium text-white">{symbolKey}</h4>
+                          <span className="text-xs text-gray-400">
+                            Default: {symbol.default_lot_size || 0.01} lots
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Controls Row */}
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
+                        {/* Volume Input */}
+                        <div className="flex items-center space-x-2">
+                          <label className="text-xs text-gray-400 whitespace-nowrap">Volume:</label>
+                          <input
+                            type="number"
+                            value={order.volume}
+                            onChange={(e) => handleTradingVolumeChange(symbolKey, e.target.value)}
+                            className="w-20 px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                            min="0.01"
+                            step="0.01"
+                            placeholder={symbol.default_lot_size?.toString() || "0.01"}
+                          />
+                          <span className="text-xs text-gray-400">lots</span>
+                        </div>
+                        
+                        {/* Buy/Sell Buttons */}
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => {
+                              // Update order type and place trade with explicit order type
+                              handleTradingOrderTypeChange(symbolKey, 'buy');
+                              placeTrade(symbolKey, 'buy');
+                            }}
+                            disabled={placingTrade[symbolKey] || !order.volume || parseFloat(order.volume) <= 0}
+                            className="px-6 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          >
+                            {placingTrade[symbolKey] ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
+                                <span>Placing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                </svg>
+                                <span>BUY</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              // Update order type and place trade with explicit order type
+                              handleTradingOrderTypeChange(symbolKey, 'sell');
+                              placeTrade(symbolKey, 'sell');
+                            }}
+                            disabled={placingTrade[symbolKey] || !order.volume || parseFloat(order.volume) <= 0}
+                            className="px-6 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          >
+                            {placingTrade[symbolKey] ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
+                                <span>Placing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                                </svg>
+                                <span>SELL</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {symbolSettings.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-gray-400">No symbols available. Please check symbol settings.</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Close Position Buttons */}
         {positions.length > 0 && (

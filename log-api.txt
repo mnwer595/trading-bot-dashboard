@@ -1,0 +1,252 @@
+# 📊 API Endpoints - Simple Reference
+
+## Base URL
+```
+http://localhost:80
+```
+
+## 1. Get Logs by Type
+
+### Trade Request Logs
+```bash
+GET /logs/trade_request?limit=10
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "account_id": "single",
+  "log_type": "trade_request",
+  "total_logs": 1,
+  "logs": [
+    {
+      "timestamp": "2025-01-12T23:15:00.123456",
+      "type": "trade_request",
+      "data": {
+        "request_id": "a1b2c3d4",
+        "source": "webhook",
+        "raw_data": {
+          "action": "buy",
+          "symbol": "BTCUSD",
+          "comment": "1m-gold"
+        },
+        "status": "completed",
+        "total_accounts": 2,
+        "successful_accounts": 1,
+        "failed_accounts": 1
+      }
+    }
+  ]
+}
+```
+
+### Trade Logs
+```bash
+GET /logs/trade?limit=10
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "account_id": "single",
+  "log_type": "trade",
+  "total_logs": 1,
+  "logs": [
+    {
+      "timestamp": "2025-01-12T23:15:03.123456",
+      "type": "trade",
+      "data": {
+        "action": "buy",
+        "symbol": "BTCUSDm",
+        "volume": 0.01,
+        "result": "success",
+        "order_id": "12345",
+        "request_id": "a1b2c3d4"
+      }
+    }
+  ]
+}
+```
+
+### Error Logs
+```bash
+GET /logs/error?limit=10
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "account_id": "single",
+  "log_type": "error",
+  "total_logs": 1,
+  "logs": [
+    {
+      "timestamp": "2025-01-12T23:15:02.123456",
+      "type": "error",
+      "data": {
+        "action": "close_position",
+        "error": "Position not found",
+        "request_id": "a1b2c3d4"
+      }
+    }
+  ]
+}
+```
+
+### Webhook Logs
+```bash
+GET /logs/webhook?limit=10
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "account_id": "single",
+  "log_type": "webhook",
+  "total_logs": 1,
+  "logs": [
+    {
+      "timestamp": "2025-01-12T23:15:00.123456",
+      "type": "webhook",
+      "data": {
+        "action": "buy",
+        "symbol": "BTCUSD",
+        "comment": "1m-gold"
+      }
+    }
+  ]
+}
+```
+
+## 2. Get Statistics by Type
+
+### Trade Request Statistics
+```bash
+GET /logs/trade_request/stats
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "account_id": "single",
+  "log_type": "trade_request",
+  "statistics": {
+    "total_logs": 25,
+    "recent_logs_24h": 8,
+    "file_size_mb": 0.5
+  }
+}
+```
+
+### Trade Statistics
+```bash
+GET /logs/trade/stats
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "account_id": "single",
+  "log_type": "trade",
+  "statistics": {
+    "total_logs": 150,
+    "recent_logs_24h": 45,
+    "file_size_mb": 1.0
+  }
+}
+```
+
+## 3. Get All Logs
+
+```bash
+GET /logs?limit=10
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "account_id": "single",
+  "log_type": "all",
+  "total_logs": 3,
+  "logs": [
+    {
+      "timestamp": "2025-01-12T23:15:03.123456",
+      "type": "trade",
+      "data": {
+        "action": "buy",
+        "result": "success",
+        "order_id": "12345"
+      }
+    },
+    {
+      "timestamp": "2025-01-12T23:15:02.123456",
+      "type": "error",
+      "data": {
+        "error": "Position not found"
+      }
+    },
+    {
+      "timestamp": "2025-01-12T23:15:00.123456",
+      "type": "webhook",
+      "data": {
+        "action": "buy",
+        "symbol": "BTCUSD"
+      }
+    }
+  ]
+}
+```
+
+## 4. Get All Statistics
+
+```bash
+GET /logs/stats
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "account_id": "single",
+  "log_type": "all",
+  "statistics": {
+    "total_logs": 200,
+    "type_breakdown": {
+      "trade_request": 25,
+      "trade": 150,
+      "error": 12,
+      "webhook": 13
+    }
+  }
+}
+```
+
+## Query Parameters
+
+- `limit` - Max logs to return (1-1000)
+- `account_id` - Filter by account
+- `source` - Filter by source
+- `type` - Filter by log type (for `/logs` endpoint)
+
+## Examples
+
+```bash
+# Get last 50 trade request logs
+GET /logs/trade_request?limit=50
+
+# Get trade logs for test account
+GET /logs/trade?account_id=test
+
+# Get error logs from webhook handler
+GET /logs/error?source=webhook_handler
+
+# Get all trade logs
+GET /logs?type=trade&limit=100
+```

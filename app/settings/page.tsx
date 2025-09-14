@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import AccountSelector from "../components/AccountSelector";
 
 const API_URL = "http://198.23.206.54";
 const GET_SETTINGS_URL = `${API_URL}/getsettings`;
@@ -68,16 +69,24 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<string>("test");
 
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [selectedAccount]);
+
+  const handleAccountChange = (accountId: string) => {
+    setSelectedAccount(accountId);
+  };
 
   const fetchSettings = async () => {
     try {
-      console.log("Fetching settings from:", GET_SETTINGS_URL);
+      const url = new URL(GET_SETTINGS_URL);
+      url.searchParams.append('account_id', selectedAccount);
       
-      const response = await fetch(GET_SETTINGS_URL, {
+      console.log("Fetching settings from:", url.toString());
+      
+      const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -106,9 +115,12 @@ export default function SettingsPage() {
 
   const saveSettings = async (settingsToSave: Settings) => {
     try {
+      const url = new URL(SAVE_SETTINGS_URL);
+      url.searchParams.append('account_id', selectedAccount);
+      
       console.log("Saving settings:", settingsToSave);
 
-      const response = await fetch(SAVE_SETTINGS_URL, {
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -227,12 +239,20 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-gray-900 p-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
-          <h1 className="text-3xl font-bold text-white">General Settings</h1>
-          <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 space-y-4 lg:space-y-0">
+          <div>
+            <h1 className="text-3xl font-bold text-white">General Settings</h1>
+            <p className="text-gray-400 mt-1">Configure your trading bot settings</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <AccountSelector 
+              selectedAccount={selectedAccount}
+              onAccountChange={handleAccountChange}
+              className="w-full sm:w-auto"
+            />
             <Link 
               href="/" 
-              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors text-center"
             >
               Back to Dashboard
             </Link>
@@ -374,7 +394,7 @@ export default function SettingsPage() {
                     <label className="block text-sm font-medium text-gray-300 mb-1">Start Hour</label>
                     <input
                       type="number"
-                      value={settings.trading_hours.start}
+                      value={settings.trading_hours?.start || 0}
                       onChange={(e) => handleNumberChange('trading_hours.start', Number(e.target.value))}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       min="0"
@@ -386,7 +406,7 @@ export default function SettingsPage() {
                     <label className="block text-sm font-medium text-gray-300 mb-1">End Hour</label>
                     <input
                       type="number"
-                      value={settings.trading_hours.end}
+                      value={settings.trading_hours?.end || 23}
                       onChange={(e) => handleNumberChange('trading_hours.end', Number(e.target.value))}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       min="0"
@@ -549,7 +569,9 @@ export default function SettingsPage() {
                          value={settings.profit_secure?.mode || 'percentage'}
                          onChange={(e) => {
                            const updatedSettings = { ...settings };
-                           updatedSettings.profit_secure.mode = e.target.value;
+                           if (updatedSettings.profit_secure) {
+                             updatedSettings.profit_secure.mode = e.target.value;
+                           }
                            setSettings(updatedSettings);
                          }}
                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"

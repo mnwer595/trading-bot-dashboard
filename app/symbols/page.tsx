@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import AccountSelector from "../components/AccountSelector";
 
 const API_URL = "http://198.23.206.54";
 const GET_SYMBOLS_URL = `${API_URL}/getsymbols`;
@@ -32,6 +33,23 @@ export default function SymbolsPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [originalSymbols, setOriginalSymbols] = useState<SymbolSettings[]>([]);
   const [editingFields, setEditingFields] = useState<{ [key: string]: string }>({});
+  const [selectedAccount, setSelectedAccount] = useState<string>("test");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newSymbol, setNewSymbol] = useState<Partial<SymbolSettings>>({
+    symbol: '',
+    name: '',
+    profit_secure_enabled: false,
+    profit_lock_enabled: false,
+    profit_lock_start_pips: 0,
+    profit_lock_distance_pips: 0,
+    sl_trailing_enabled: false,
+    sl_trailing_start_pips: 0,
+    sl_trailing_distance_pips: 0,
+    standard_lot: 100000,
+    digits: 5,
+    price2pips: 100000,
+    default_sl_pips: 0,
+  });
 
   const cleanSymbolData = (symbol: any): SymbolSettings => {
     return {
@@ -53,9 +71,12 @@ export default function SymbolsPage() {
 
   const fetchSymbols = async () => {
     try {
-      console.log("Fetching symbols from:", GET_SYMBOLS_URL);
+      const url = new URL(GET_SYMBOLS_URL);
+      url.searchParams.append('account_id', selectedAccount);
       
-      const response = await fetch(GET_SYMBOLS_URL, {
+      console.log("Fetching symbols from:", url.toString());
+      
+      const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -95,7 +116,10 @@ export default function SymbolsPage() {
       const cleanedSymbolsToSave = symbolsToSave.map(cleanSymbolData);
       console.log("Saving symbols:", cleanedSymbolsToSave);
 
-      const response = await fetch(SAVE_SYMBOLS_URL, {
+      const url = new URL(SAVE_SYMBOLS_URL);
+      url.searchParams.append('account_id', selectedAccount);
+
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,7 +144,71 @@ export default function SymbolsPage() {
 
   useEffect(() => {
     fetchSymbols();
-  }, []);
+  }, [selectedAccount]);
+
+  const handleAccountChange = (accountId: string) => {
+    setSelectedAccount(accountId);
+  };
+
+  const handleAddSymbol = () => {
+    setShowAddModal(true);
+    // Reset form
+    setNewSymbol({
+      symbol: '',
+      name: '',
+      profit_secure_enabled: false,
+      profit_lock_enabled: false,
+      profit_lock_start_pips: 0,
+      profit_lock_distance_pips: 0,
+      sl_trailing_enabled: false,
+      sl_trailing_start_pips: 0,
+      sl_trailing_distance_pips: 0,
+      standard_lot: 100000,
+      digits: 5,
+      price2pips: 100000,
+      default_sl_pips: 0,
+    });
+  };
+
+  const handleNewSymbolChange = (field: string, value: any) => {
+    setNewSymbol(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleCreateSymbol = async () => {
+    if (!newSymbol.symbol || !newSymbol.name) {
+      setError('Symbol and name are required');
+      return;
+    }
+
+    // Check if symbol already exists
+    if (symbols.some(s => s.symbol === newSymbol.symbol)) {
+      setError('Symbol already exists');
+      return;
+    }
+
+    try {
+      const symbolToAdd = cleanSymbolData(newSymbol);
+      const updatedSymbols = [...symbols, symbolToAdd];
+      
+      setSymbols(updatedSymbols);
+      setHasUnsavedChanges(true);
+      setShowAddModal(false);
+      setError(null);
+      
+      console.log('New symbol added:', symbolToAdd);
+    } catch (err: any) {
+      console.error('Error adding symbol:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    setError(null);
+  };
 
   const handleSymbolChange = (symbolName: string, field: string, value: any) => {
     const updatedSymbols = symbols.map(symbol => {
@@ -239,6 +327,19 @@ export default function SymbolsPage() {
              <p className="text-gray-400 mt-1">Configure individual symbol parameters and trading rules</p>
            </div>
            <div className="flex flex-col sm:flex-row gap-2">
+             <AccountSelector 
+               selectedAccount={selectedAccount}
+               onAccountChange={handleAccountChange}
+             />
+             <button 
+               onClick={handleAddSymbol}
+               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors flex items-center space-x-2"
+             >
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+               </svg>
+               <span>Add Symbol</span>
+             </button>
              <Link 
                href="/" 
                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
@@ -575,6 +676,241 @@ export default function SymbolsPage() {
             </svg>
             <h3 className="mt-2 text-sm font-medium text-gray-300">No symbols found</h3>
             <p className="mt-1 text-sm text-gray-500">There are currently no symbols configured.</p>
+          </div>
+        )}
+
+        {/* Add Symbol Modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b border-gray-700">
+                <h3 className="text-xl font-semibold text-white">Add New Symbol</h3>
+                <button
+                  onClick={handleCloseAddModal}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                {/* Error Display */}
+                {error && (
+                  <div className="mb-4 bg-red-900/50 border border-red-700 rounded-lg p-3">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-red-300">Error</h3>
+                        <div className="mt-1 text-sm text-red-400">{error}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-6">
+                  {/* Basic Information */}
+                  <div className="space-y-4">
+                    <h4 className="text-lg font-medium text-white">Basic Information</h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Symbol *</label>
+                        <input
+                          type="text"
+                          value={newSymbol.symbol || ''}
+                          onChange={(e) => handleNewSymbolChange('symbol', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="e.g., XAUUSDm"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Name *</label>
+                        <input
+                          type="text"
+                          value={newSymbol.name || ''}
+                          onChange={(e) => handleNewSymbolChange('name', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="e.g., Gold vs US Dollar"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Symbol Properties */}
+                  <div className="space-y-4">
+                    <h4 className="text-lg font-medium text-white">Symbol Properties</h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Standard Lot</label>
+                        <input
+                          type="number"
+                          value={newSymbol.standard_lot || 100000}
+                          onChange={(e) => handleNewSymbolChange('standard_lot', Number(e.target.value) || 100000)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="1"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Digits</label>
+                        <input
+                          type="number"
+                          value={newSymbol.digits || 5}
+                          onChange={(e) => handleNewSymbolChange('digits', Number(e.target.value) || 5)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="0"
+                          max="10"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Price to Pips</label>
+                        <input
+                          type="number"
+                          value={newSymbol.price2pips || 100000}
+                          onChange={(e) => handleNewSymbolChange('price2pips', Number(e.target.value) || 100000)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="1"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">Default SL Pips</label>
+                        <input
+                          type="number"
+                          value={newSymbol.default_sl_pips || 0}
+                          onChange={(e) => handleNewSymbolChange('default_sl_pips', Number(e.target.value) || 0)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trading Features */}
+                  <div className="space-y-4">
+                    <h4 className="text-lg font-medium text-white">Trading Features</h4>
+                    
+                    <div className="space-y-4">
+                      {/* Profit Lock */}
+                      <div className="bg-gray-700 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className="text-sm font-medium text-green-400">Profit Lock</h5>
+                          <ToggleButton
+                            checked={newSymbol.profit_lock_enabled || false}
+                            onChange={(value) => handleNewSymbolChange('profit_lock_enabled', value)}
+                            label=""
+                          />
+                        </div>
+                        
+                        {(newSymbol.profit_lock_enabled) && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Start Pips</label>
+                              <input
+                                type="number"
+                                value={newSymbol.profit_lock_start_pips || 0}
+                                onChange={(e) => handleNewSymbolChange('profit_lock_start_pips', Number(e.target.value) || 0)}
+                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                min="0"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Distance Pips</label>
+                              <input
+                                type="number"
+                                value={newSymbol.profit_lock_distance_pips || 0}
+                                onChange={(e) => handleNewSymbolChange('profit_lock_distance_pips', Number(e.target.value) || 0)}
+                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                min="0"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SL Trailing */}
+                      <div className="bg-gray-700 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className="text-sm font-medium text-orange-400">SL Trailing</h5>
+                          <ToggleButton
+                            checked={newSymbol.sl_trailing_enabled || false}
+                            onChange={(value) => handleNewSymbolChange('sl_trailing_enabled', value)}
+                            label=""
+                          />
+                        </div>
+                        
+                        {(newSymbol.sl_trailing_enabled) && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Start Pips</label>
+                              <input
+                                type="number"
+                                value={newSymbol.sl_trailing_start_pips || 0}
+                                onChange={(e) => handleNewSymbolChange('sl_trailing_start_pips', Number(e.target.value) || 0)}
+                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                min="0"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Distance Pips</label>
+                              <input
+                                type="number"
+                                value={newSymbol.sl_trailing_distance_pips || 0}
+                                onChange={(e) => handleNewSymbolChange('sl_trailing_distance_pips', Number(e.target.value) || 0)}
+                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                min="0"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Profit Secure */}
+                      <div className="bg-gray-700 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-sm font-medium text-purple-400">Profit Secure</h5>
+                          <ToggleButton
+                            checked={newSymbol.profit_secure_enabled || false}
+                            onChange={(value) => handleNewSymbolChange('profit_secure_enabled', value)}
+                            label=""
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 p-6 border-t border-gray-700">
+                <button
+                  onClick={handleCloseAddModal}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateSymbol}
+                  disabled={!newSymbol.symbol || !newSymbol.name}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span>Add Symbol</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -2,10 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import AccountSelector from "../components/AccountSelector";
 
 const API_URL = "http://198.23.206.54";
 const GET_EXPERTS_URL = `${API_URL}/getexperts`;
 const SAVE_EXPERTS_URL = `${API_URL}/saveexperts`;
+
+type WorkingHours = {
+  enabled: boolean;
+  periods: Array<{
+    start: string;
+    end: string;
+  }>;
+};
 
 type Expert = {
   name: string;
@@ -19,6 +28,16 @@ type Expert = {
   signal_in_same_direction: boolean;
   volume_keep: number;
   last_signal: string;
+  scheduled_trading_enabled: boolean;
+  working_hours: {
+    monday: WorkingHours;
+    tuesday: WorkingHours;
+    wednesday: WorkingHours;
+    thursday: WorkingHours;
+    friday: WorkingHours;
+    saturday: WorkingHours;
+    sunday: WorkingHours;
+  };
 };
 
 export default function ExpertsPage() {
@@ -34,23 +53,42 @@ export default function ExpertsPage() {
   const [newExpertName, setNewExpertName] = useState("");
   const [editingExpertName, setEditingExpertName] = useState<string | null>(null);
   const [editingNameValue, setEditingNameValue] = useState("");
+  const [selectedAccount, setSelectedAccount] = useState<string>("test");
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedExpertForSchedule, setSelectedExpertForSchedule] = useState<string | null>(null);
 
   const cleanExpertData = (expert: any): Expert => {
     // Remove duplicate fields and ensure consistent field names
     const { multi_actions, multi_tp, ...cleanedExpert } = expert;
     
+    // Ensure working_hours has default structure if missing
+    const defaultWorkingHours = {
+      monday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+      tuesday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+      wednesday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+      thursday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+      friday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+      saturday: { enabled: false, periods: [] },
+      sunday: { enabled: false, periods: [] }
+    };
+    
     return {
       ...cleanedExpert,
       "multi-actions": expert["multi-actions"] !== undefined ? expert["multi-actions"] : expert.multi_actions || false,
       "multi-tp": expert["multi-tp"] !== undefined ? expert["multi-tp"] : expert.multi_tp || false,
+      scheduled_trading_enabled: expert.scheduled_trading_enabled || false,
+      working_hours: expert.working_hours || defaultWorkingHours,
     } as Expert;
   };
 
   const fetchExperts = async () => {
     try {
-      console.log("Fetching experts from:", GET_EXPERTS_URL);
+      const url = new URL(GET_EXPERTS_URL);
+      url.searchParams.append('account_id', selectedAccount);
       
-      const response = await fetch(GET_EXPERTS_URL, {
+      console.log("Fetching experts from:", url.toString());
+      
+      const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -90,7 +128,10 @@ export default function ExpertsPage() {
       const cleanedExpertsToSave = expertsToSave.map(cleanExpertData);
       console.log("Saving experts:", cleanedExpertsToSave);
 
-      const response = await fetch(SAVE_EXPERTS_URL, {
+      const url = new URL(SAVE_EXPERTS_URL);
+      url.searchParams.append('account_id', selectedAccount);
+
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -115,7 +156,11 @@ export default function ExpertsPage() {
 
   useEffect(() => {
     fetchExperts();
-  }, []);
+  }, [selectedAccount]);
+
+  const handleAccountChange = (accountId: string) => {
+    setSelectedAccount(accountId);
+  };
 
   const toggleExpertExpansion = (expertName: string) => {
     setExpandedExperts(prev => {
@@ -133,8 +178,34 @@ export default function ExpertsPage() {
     const updatedExperts = experts.map(expert => {
       if (expert.name === expertName) {
         return {
+              ...expert, 
+              [field]: value 
+        };
+            }
+      return expert;
+    });
+      
+      setExperts(updatedExperts);
+    
+    // Check if there are unsaved changes
+    const hasChanges = JSON.stringify(updatedExperts) !== JSON.stringify(originalExperts);
+    setHasUnsavedChanges(hasChanges);
+      
+      console.log(`Updated ${field} for expert ${expertName}:`, value);
+  };
+
+  const handleWorkingHoursChange = (expertName: string, day: string, field: string, value: any) => {
+    const updatedExperts = experts.map(expert => {
+      if (expert.name === expertName) {
+        return {
           ...expert,
-          [field]: value
+          working_hours: {
+            ...expert.working_hours,
+            [day]: {
+              ...expert.working_hours[day as keyof typeof expert.working_hours],
+              [field]: value
+            }
+          }
         };
       }
       return expert;
@@ -146,7 +217,108 @@ export default function ExpertsPage() {
     const hasChanges = JSON.stringify(updatedExperts) !== JSON.stringify(originalExperts);
     setHasUnsavedChanges(hasChanges);
     
-    console.log(`Updated ${field} for expert ${expertName}:`, value);
+    console.log(`Updated working hours ${field} for ${day} in expert ${expertName}:`, value);
+  };
+
+  const handlePeriodChange = (expertName: string, day: string, periodIndex: number, field: 'start' | 'end', value: string) => {
+    const updatedExperts = experts.map(expert => {
+      if (expert.name === expertName) {
+        const daySettings = expert.working_hours[day as keyof typeof expert.working_hours];
+        const updatedPeriods = [...daySettings.periods];
+        updatedPeriods[periodIndex] = {
+          ...updatedPeriods[periodIndex],
+          [field]: value
+        };
+        
+        return {
+          ...expert,
+          working_hours: {
+            ...expert.working_hours,
+            [day]: {
+              ...daySettings,
+              periods: updatedPeriods
+            }
+          }
+        };
+      }
+      return expert;
+    });
+    
+    setExperts(updatedExperts);
+    
+    // Check if there are unsaved changes
+    const hasChanges = JSON.stringify(updatedExperts) !== JSON.stringify(originalExperts);
+    setHasUnsavedChanges(hasChanges);
+    
+    console.log(`Updated period ${field} for ${day} in expert ${expertName}:`, value);
+  };
+
+  const handleAddPeriod = (expertName: string, day: string) => {
+    const updatedExperts = experts.map(expert => {
+      if (expert.name === expertName) {
+        const daySettings = expert.working_hours[day as keyof typeof expert.working_hours];
+        const newPeriod = { start: "09:00", end: "17:00" };
+        
+        return {
+          ...expert,
+          working_hours: {
+            ...expert.working_hours,
+            [day]: {
+              ...daySettings,
+              periods: [...daySettings.periods, newPeriod]
+            }
+          }
+        };
+      }
+      return expert;
+    });
+    
+    setExperts(updatedExperts);
+    
+    // Check if there are unsaved changes
+    const hasChanges = JSON.stringify(updatedExperts) !== JSON.stringify(originalExperts);
+    setHasUnsavedChanges(hasChanges);
+    
+    console.log(`Added new period for ${day} in expert ${expertName}`);
+  };
+
+  const handleRemovePeriod = (expertName: string, day: string, periodIndex: number) => {
+    const updatedExperts = experts.map(expert => {
+      if (expert.name === expertName) {
+        const daySettings = expert.working_hours[day as keyof typeof expert.working_hours];
+        const updatedPeriods = daySettings.periods.filter((_, index) => index !== periodIndex);
+        
+        return {
+          ...expert,
+          working_hours: {
+            ...expert.working_hours,
+            [day]: {
+              ...daySettings,
+              periods: updatedPeriods
+            }
+          }
+        };
+      }
+      return expert;
+    });
+    
+    setExperts(updatedExperts);
+    
+    // Check if there are unsaved changes
+    const hasChanges = JSON.stringify(updatedExperts) !== JSON.stringify(originalExperts);
+    setHasUnsavedChanges(hasChanges);
+    
+    console.log(`Removed period ${periodIndex} for ${day} in expert ${expertName}`);
+  };
+
+  const handleOpenScheduleModal = (expertName: string) => {
+    setSelectedExpertForSchedule(expertName);
+    setShowScheduleModal(true);
+  };
+
+  const handleCloseScheduleModal = () => {
+    setShowScheduleModal(false);
+    setSelectedExpertForSchedule(null);
   };
 
   const handleSaveChanges = async () => {
@@ -202,7 +374,17 @@ export default function ExpertsPage() {
       tp_when_in_profit: false,
       signal_in_same_direction: true,
       volume_keep: 0,
-      last_signal: "buy"
+      last_signal: "buy",
+      scheduled_trading_enabled: false,
+      working_hours: {
+        monday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+        tuesday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+        wednesday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+        thursday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+        friday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
+        saturday: { enabled: false, periods: [] },
+        sunday: { enabled: false, periods: [] }
+      }
     };
 
     const updatedExperts = [...experts, newExpert];
@@ -368,6 +550,10 @@ export default function ExpertsPage() {
             <p className="text-gray-400 mt-1">Manage and configure trading expert advisors</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
+            <AccountSelector 
+              selectedAccount={selectedAccount}
+              onAccountChange={handleAccountChange}
+            />
             <Link 
               href="/" 
               className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
@@ -476,7 +662,7 @@ export default function ExpertsPage() {
                       <div className={`w-2 h-2 rounded-full ${expert.enabled ? 'bg-green-400' : 'bg-gray-500'}`}></div>
                       <div className="flex-1">
                         {editingExpertName === expert.name ? (
-                          <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2">
                             <input
                               type="text"
                               value={editingNameValue}
@@ -586,33 +772,33 @@ export default function ExpertsPage() {
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
-                    </div>
                   </div>
+                </div>
 
                   {/* Expert Settings - Expandable */}
                   {isExpanded && (
                     <div className="border-t border-gray-700 p-4">
-                      <div className="space-y-4">
-                        {/* Basic Settings */}
-                        <div className="space-y-3">
-                          <h4 className="text-sm font-medium text-blue-400 border-b border-gray-700 pb-1">Basic Settings</h4>
-                          
-                          <ToggleButton
-                            checked={expert.enabled}
-                            onChange={(value) => handleExpertChange(expert.name, 'enabled', value)}
-                            label="Enabled"
+                <div className="space-y-4">
+                  {/* Basic Settings */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-blue-400 border-b border-gray-700 pb-1">Basic Settings</h4>
+                    
+                    <ToggleButton
+                      checked={expert.enabled}
+                      onChange={(value) => handleExpertChange(expert.name, 'enabled', value)}
+                      label="Enabled"
                           />
                           
                           <ToggleButton
                             checked={expert.buy_only}
                             onChange={(value) => handleExpertChange(expert.name, 'buy_only', value)}
                             label="Buy Only"
-                          />
-                          
-                          <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">Lot Size</label>
-                            <input
-                              type="number"
+                    />
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Lot Size</label>
+                      <input
+                        type="number"
                               value={getInputValue(expert.name, 'lot_size', expert.lot_size)}
                               onChange={(e) => {
                                 const fieldKey = `${expert.name}-lot_size`;
@@ -621,16 +807,16 @@ export default function ExpertsPage() {
                               }}
                               onFocus={() => handleInputFocus(expert.name, 'lot_size', expert.lot_size)}
                               onBlur={(e) => handleInputBlur(expert.name, 'lot_size', e.target.value)}
-                              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              min="0.01"
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0.01"
                               step="0.01"
-                            />
-                          </div>
-                          
-                          <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">Volume Keep</label>
-                            <input
-                              type="number"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Volume Keep</label>
+                      <input
+                        type="number"
                               value={getInputValue(expert.name, 'volume_keep', expert.volume_keep)}
                               onChange={(e) => {
                                 const fieldKey = `${expert.name}-volume_keep`;
@@ -639,24 +825,24 @@ export default function ExpertsPage() {
                               }}
                               onFocus={() => handleInputFocus(expert.name, 'volume_keep', expert.volume_keep)}
                               onBlur={(e) => handleInputBlur(expert.name, 'volume_keep', e.target.value)}
-                              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              min="0"
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0"
                               step="0.01"
-                            />
-                          </div>
-                        </div>
+                      />
+                    </div>
+                  </div>
 
                         {/* Trading Settings */}
-                        <div className="space-y-3">
+                  <div className="space-y-3">
                           <h4 className="text-sm font-medium text-green-400 border-b border-gray-700 pb-1">Trading Settings</h4>
-                          
-                          <ToggleButton
-                                            checked={expert["multi-actions"]}
-                onChange={(value) => handleExpertChange(expert.name, 'multi-actions', value)}
-                            label="Multi Actions"
-                          />
-                          
-                          <ToggleButton
+                    
+                    <ToggleButton
+                      checked={expert["multi-actions"]}
+                      onChange={(value) => handleExpertChange(expert.name, 'multi-actions', value)}
+                      label="Multi Actions"
+                    />
+                    
+                    <ToggleButton
                             checked={expert.signal_in_same_direction}
                             onChange={(value) => handleExpertChange(expert.name, 'signal_in_same_direction', value)}
                             label="Signal in Same Direction"
@@ -666,17 +852,17 @@ export default function ExpertsPage() {
                         {/* Take Profit Settings */}
                         <div className="space-y-3">
                           <h4 className="text-sm font-medium text-orange-400 border-b border-gray-700 pb-1">Take Profit Settings</h4>
-                          
-                          <ToggleButton
-                            checked={expert.tp_enabled}
-                            onChange={(value) => handleExpertChange(expert.name, 'tp_enabled', value)}
-                            label="TP Enabled"
+                    
+                    <ToggleButton
+                      checked={expert.tp_enabled}
+                      onChange={(value) => handleExpertChange(expert.name, 'tp_enabled', value)}
+                      label="TP Enabled"
                           />
                           
-                          <ToggleButton
-                            checked={expert.tp_when_in_profit}
-                            onChange={(value) => handleExpertChange(expert.name, 'tp_when_in_profit', value)}
-                            label="TP When in Profit"
+                      <ToggleButton
+                        checked={expert.tp_when_in_profit}
+                        onChange={(value) => handleExpertChange(expert.name, 'tp_when_in_profit', value)}
+                        label="TP When in Profit"
                           />
                           
                           <ToggleButton
@@ -685,7 +871,33 @@ export default function ExpertsPage() {
                             label="Multi TP"
                           />
                         </div>
-                      </div>
+
+                        {/* Scheduled Trading Settings */}
+                        <div className="space-y-3">
+                          <h4 className="text-sm font-medium text-purple-400 border-b border-gray-700 pb-1">Scheduled Trading</h4>
+                          
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <ToggleButton
+                                checked={expert.scheduled_trading_enabled}
+                                onChange={(value) => handleExpertChange(expert.name, 'scheduled_trading_enabled', value)}
+                                label="Enable Scheduled Trading"
+                              />
+                              {expert.scheduled_trading_enabled && (
+                                <span className="text-xs text-gray-400">
+                                  {Object.values(expert.working_hours).filter(day => day.enabled).length} days configured
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleOpenScheduleModal(expert.name)}
+                              className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-500 transition-colors"
+                            >
+                              Configure Schedule
+                            </button>
+                          </div>
+                        </div>
+                  </div>
                     </div>
                   )}
                 </div>
@@ -764,7 +976,120 @@ export default function ExpertsPage() {
             </div>
           </div>
         )}
+
+        {/* Schedule Settings Modal */}
+        {showScheduleModal && selectedExpertForSchedule && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b border-gray-700">
+                <h3 className="text-xl font-semibold text-white">
+                  Schedule Settings - {selectedExpertForSchedule}
+                </h3>
+                <button
+                  onClick={handleCloseScheduleModal}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                {(() => {
+                  const expert = experts.find(e => e.name === selectedExpertForSchedule);
+                  if (!expert) return null;
+                  
+                  return (
+                    <div className="space-y-6">
+                      {/* Enable/Disable Toggle */}
+                      <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
+                        <div>
+                          <h4 className="text-lg font-medium text-white">Scheduled Trading</h4>
+                          <p className="text-sm text-gray-400">Enable or disable scheduled trading for this expert</p>
+                        </div>
+                        <ToggleButton
+                          checked={expert.scheduled_trading_enabled}
+                          onChange={(value) => handleExpertChange(expert.name, 'scheduled_trading_enabled', value)}
+                          label=""
+                        />
+                      </div>
+
+                      {/* Working Hours Configuration */}
+                      {expert.scheduled_trading_enabled && (
+                        <div className="space-y-4">
+                          <h4 className="text-lg font-medium text-white">Working Hours</h4>
+                          <p className="text-sm text-gray-400">Configure trading hours for each day of the week</p>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {Object.entries(expert.working_hours).map(([day, daySettings]) => (
+                              <div key={day} className="bg-gray-700 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="text-sm font-medium text-gray-300 capitalize">{day}</span>
+                                  <ToggleButton
+                                    checked={daySettings.enabled}
+                                    onChange={(value) => handleWorkingHoursChange(expert.name, day, 'enabled', value)}
+                                    label=""
+                                  />
+                                </div>
+                                
+                                {daySettings.enabled && (
+                                  <div className="space-y-3">
+                                    {daySettings.periods.map((period, index) => (
+                                      <div key={index} className="flex items-center space-x-2">
+                                        <input
+                                          type="time"
+                                          value={period.start}
+                                          onChange={(e) => handlePeriodChange(expert.name, day, index, 'start', e.target.value)}
+                                          className="px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <span className="text-gray-400">to</span>
+                                        <input
+                                          type="time"
+                                          value={period.end}
+                                          onChange={(e) => handlePeriodChange(expert.name, day, index, 'end', e.target.value)}
+                                          className="px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        {daySettings.periods.length > 1 && (
+                                          <button
+                                            onClick={() => handleRemovePeriod(expert.name, day, index)}
+                                            className="px-2 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 focus:outline-none focus:ring-1 focus:ring-red-500 transition-colors"
+                                          >
+                                            ×
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                    <button
+                                      onClick={() => handleAddPeriod(expert.name, day)}
+                                      className="w-full px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors"
+                                    >
+                                      + Add Period
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+              
+              <div className="flex justify-end space-x-3 p-6 border-t border-gray-700">
+                <button
+                  onClick={handleCloseScheduleModal}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
-}
+} 

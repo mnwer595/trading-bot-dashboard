@@ -1,0 +1,14 @@
+[
+    {
+      "id": "real",
+      "name": "Real Trading Account",
+      "description": "Live trading account for real money",
+      "enabled": true
+    },
+    {
+      "id": "test",
+      "name": "Test Trading Account",
+      "description": "Test account for strategy testing and development",
+      "enabled": true
+    }
+  ]
