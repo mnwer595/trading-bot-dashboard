@@ -870,13 +870,13 @@ export default function ExpertsPage() {
                 onChange={(value) => handleExpertChange(expert.name, 'multi-tp', value)}
                             label="Multi TP"
                           />
-                        </div>
+                  </div>
 
                         {/* Scheduled Trading Settings */}
                         <div className="space-y-3">
                           <h4 className="text-sm font-medium text-purple-400 border-b border-gray-700 pb-1">Scheduled Trading</h4>
                           
-                          <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-3">
                               <ToggleButton
                                 checked={expert.scheduled_trading_enabled}
@@ -886,7 +886,7 @@ export default function ExpertsPage() {
                               {expert.scheduled_trading_enabled && (
                                 <span className="text-xs text-gray-400">
                                   {Object.values(expert.working_hours).filter(day => day.enabled).length} days configured
-                                </span>
+                      </span>
                               )}
                             </div>
                             <button
@@ -896,7 +896,7 @@ export default function ExpertsPage() {
                               Configure Schedule
                             </button>
                           </div>
-                        </div>
+                    </div>
                   </div>
                     </div>
                   )}

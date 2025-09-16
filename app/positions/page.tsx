@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import AccountSelector from "../components/AccountSelector";
 
@@ -16,12 +16,12 @@ type Position = {
   symbol: string;
   type: "buy" | "sell";
   volume: number;
-  open_price: number;
-  current_price: number;
+  price_open: number;
+  price_current: number;
   profit: number;
-  swap: number;
-  open_time: string;
-  magic: number;
+  swap?: number;
+  open_time?: string;
+  magic?: number;
   comment?: string;
   sl: number;
   tp: number;
@@ -45,17 +45,6 @@ type Position = {
   created_at: string;
 };
 
-type PositionUpdate = {
-  ticket: number;
-  symbol: string;
-  profit_secure_enabled: boolean;
-  profit_lock_enabled: boolean;
-  profit_lock_start_pips: number;
-  profit_lock_distance_pips: number;
-  sl_trailing_enabled: boolean;
-  sl_trailing_start_pips: number;
-  sl_trailing_distance_pips: number;
-};
 
 type ClosePositionData = {
   ticket: number;
@@ -79,6 +68,8 @@ export default function PositionsPage() {
   const [showTradingSection, setShowTradingSection] = useState(false);
   const [tradingOrders, setTradingOrders] = useState<{ [symbol: string]: { orderType: 'buy' | 'sell', volume: string } }>({});
   const [placingTrade, setPlacingTrade] = useState<{ [symbol: string]: boolean }>({});
+  const [accountSettings, setAccountSettings] = useState<any>(null);
+  const [updatingTradeMonitoring, setUpdatingTradeMonitoring] = useState(false);
 
   const getInputValue = (ticket: number, field: string, defaultValue: number): string => {
     const key = `${ticket}-${field}`;
@@ -196,10 +187,48 @@ export default function PositionsPage() {
       const data = await response.json();
       console.log("Symbol settings data:", data);
       
+      // Debug: Check if XAUUSDm config is found
+      const xauConfig = data.find((s: any) => s.symbol === 'XAUUSDm');
+      console.log("XAUUSDm config:", xauConfig);
+      
       setSymbolSettings(data);
     } catch (err: any) {
       console.error("Error fetching symbol settings:", err);
       // Don't set error state for symbol settings as it's not critical
+    }
+  };
+
+  const fetchAccountSettings = async () => {
+    if (!selectedAccount) {
+      console.log("No account selected, skipping account settings fetch");
+      return;
+    }
+
+    try {
+      console.log("Fetching account settings for account:", selectedAccount);
+      
+      const url = new URL(`${API_URL}/getsettings`);
+      url.searchParams.append('account_id', selectedAccount);
+      
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Account settings data:", data);
+      
+      setAccountSettings(data);
+    } catch (err: any) {
+      console.error("Error fetching account settings:", err);
+      // Don't set error state for account settings as it's not critical
     }
   };
 
@@ -318,10 +347,17 @@ export default function PositionsPage() {
       }
       
       // Log SL trailing values for each position and ensure proper data types
-      const processedPositions = positionsData.map((pos: any) => ({
-        ...pos,
-        // Ensure boolean fields are properly typed with defaults for missing fields
-        sl_trailing_enabled: pos.sl_trailing_enabled !== undefined ? Boolean(pos.sl_trailing_enabled) : false,
+      const processedPositions = positionsData.map((pos: any) => {
+        console.log("Processing position:", pos.ticket, {
+          price_current: pos.price_current,
+          price_open: pos.price_open,
+          symbol: pos.symbol
+        });
+        
+        return {
+          ...pos,
+          // Ensure boolean fields are properly typed with defaults for missing fields
+          sl_trailing_enabled: pos.sl_trailing_enabled !== undefined ? Boolean(pos.sl_trailing_enabled) : false,
         profit_secure_enabled: pos.profit_secure_enabled !== undefined ? Boolean(pos.profit_secure_enabled) : false,
         profit_lock_enabled: pos.profit_lock_enabled !== undefined ? Boolean(pos.profit_lock_enabled) : false,
         // Ensure numeric fields are properly typed with defaults for missing fields
@@ -329,7 +365,8 @@ export default function PositionsPage() {
         sl_trailing_distance_pips: pos.sl_trailing_distance_pips !== undefined ? Number(pos.sl_trailing_distance_pips) : 10,
         profit_lock_start_pips: pos.profit_lock_start_pips !== undefined ? Number(pos.profit_lock_start_pips) : 0,
         profit_lock_distance_pips: pos.profit_lock_distance_pips !== 0 ? Number(pos.profit_lock_distance_pips) : 0
-      }));
+        };
+      });
       
       processedPositions.forEach((pos: any) => {
         console.log(`Position ${pos.ticket} SL trailing:`, {
@@ -352,17 +389,18 @@ export default function PositionsPage() {
 
   const savePositionOptions = async (position: Position) => {
     try {
-      const updateData: PositionUpdate = {
-        ticket: position.ticket,
-        symbol: position.symbol,
-        profit_secure_enabled: position.profit_secure_enabled,
-        profit_lock_enabled: position.profit_lock_enabled,
-        profit_lock_start_pips: position.profit_lock_start_pips,
-        profit_lock_distance_pips: position.profit_lock_distance_pips,
-        sl_trailing_enabled: position.sl_trailing_enabled,
-        sl_trailing_start_pips: position.sl_trailing_start_pips,
-        sl_trailing_distance_pips: position.sl_trailing_distance_pips
-      };
+      const updateData = [
+        {
+          ticket: position.ticket,
+          profit_lock_enabled: position.profit_lock_enabled,
+          profit_lock_start_pips: position.profit_lock_start_pips,
+          profit_lock_distance_pips: position.profit_lock_distance_pips,
+          sl_trailing_enabled: position.sl_trailing_enabled,
+          sl_trailing_start_pips: position.sl_trailing_start_pips,
+          sl_trailing_distance_pips: position.sl_trailing_distance_pips,
+          profit_secure_enabled: position.profit_secure_enabled
+        }
+      ];
 
       console.log("Saving position options:", updateData);
       console.log("SL Trailing values:", {
@@ -518,8 +556,60 @@ export default function PositionsPage() {
     return () => clearInterval(interval);
   }, [selectedAccount]);
 
+  // Separate effect for account settings to avoid calling when selectedAccount is not set
+  useEffect(() => {
+    if (selectedAccount) {
+      fetchAccountSettings();
+    }
+  }, [selectedAccount]);
+
   const handleAccountChange = (accountId: string) => {
     setSelectedAccount(accountId);
+  };
+
+  const handleTradeMonitoringToggle = async (enabled: boolean) => {
+    if (!accountSettings) return;
+
+    setUpdatingTradeMonitoring(true);
+    
+    try {
+      const updatedSettings = {
+        ...accountSettings,
+        trade_monitoring_enabled: enabled
+      };
+
+      const url = new URL(`${API_URL}/savesettings`);
+      url.searchParams.append('account_id', selectedAccount);
+
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedSettings),
+        mode: 'cors',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("Trade monitoring update result:", result);
+      
+      // Update local state
+      setAccountSettings(updatedSettings);
+      
+      setCloseMessage(`Trade monitoring ${enabled ? 'enabled' : 'disabled'} successfully!`);
+      setTimeout(() => setCloseMessage(null), 3000);
+      
+    } catch (err: any) {
+      console.error("Error updating trade monitoring:", err);
+      setCloseMessage(`Error updating trade monitoring: ${err.message}`);
+      setTimeout(() => setCloseMessage(null), 5000);
+    } finally {
+      setUpdatingTradeMonitoring(false);
+    }
   };
 
   const initializeTradingOrder = (symbol: string) => {
@@ -757,14 +847,65 @@ export default function PositionsPage() {
   };
 
   const calculatePips = (position: Position) => {
-    const symbolConfig = symbolSettings.find(s => s.symbol === position.symbol);
-    if (!symbolConfig || !symbolConfig.price2pips) {
-      // Fallback to simple price difference if no symbol config
-      return Math.abs(position.current_price - position.open_price).toFixed(2);
+    console.log("=== CALCULATING PIPS ===");
+    console.log("Position:", position.ticket, position.symbol);
+    console.log("Raw prices:", {
+      price_current: position.price_current,
+      price_open: position.price_open
+    });
+    
+    // Ensure we have valid price values
+    const currentPrice = typeof position.price_current === 'string' ? parseFloat(position.price_current) : position.price_current;
+    const openPrice = typeof position.price_open === 'string' ? parseFloat(position.price_open) : position.price_open;
+    
+    console.log("Parsed prices:", {
+      currentPrice,
+      openPrice,
+      currentPriceValid: !isNaN(currentPrice),
+      openPriceValid: !isNaN(openPrice)
+    });
+    
+    // Check if prices are valid numbers
+    if (isNaN(currentPrice) || isNaN(openPrice)) {
+      console.log("❌ Invalid prices for position:", position.ticket, {
+        price_current: position.price_current,
+        price_open: position.price_open
+      });
+      return "0.0";
     }
     
-    const priceDifference = Math.abs(position.current_price - position.open_price);
+    console.log("Available symbol settings:", symbolSettings.map(s => ({ symbol: s.symbol, price2pips: s.price2pips })));
+    const symbolConfig = symbolSettings.find(s => s.symbol === position.symbol);
+    console.log("Found symbol config:", symbolConfig);
+    
+    // If no symbol config or price2pips is 0/invalid, use fallback calculation
+    if (!symbolConfig || symbolConfig.price2pips === 0) {
+      // For XAUUSDm, use 0.1 as pip value (1 pip = 0.1 for gold)
+      const pipValue = position.symbol.includes('XAU') ? 0.1 : 0.0001;
+      const priceDifference = Math.abs(currentPrice - openPrice);
+      const pips = priceDifference / pipValue;
+      console.log("Using fallback calculation for", position.symbol, {
+        currentPrice,
+        openPrice,
+        priceDifference,
+        pipValue,
+        pips,
+        reason: !symbolConfig ? "no symbol config" : "price2pips is 0"
+      });
+      return pips.toFixed(1);
+    }
+    
+    // Use symbol config price2pips
+    const priceDifference = Math.abs(currentPrice - openPrice);
     const pips = priceDifference * symbolConfig.price2pips;
+    console.log("✅ Using symbol config for", position.symbol, {
+      currentPrice,
+      openPrice,
+      priceDifference,
+      price2pips: symbolConfig.price2pips,
+      pips,
+      finalResult: pips.toFixed(1)
+    });
     return pips.toFixed(1);
   };
 
@@ -815,30 +956,54 @@ export default function PositionsPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
             <div>
               <h1 className="text-3xl font-bold text-white">Open Positions</h1>
               <p className="text-gray-400 mt-1">
                 Real-time monitoring of active trading positions
               </p>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 w-full lg:w-auto">
               <AccountSelector 
                 selectedAccount={selectedAccount}
                 onAccountChange={handleAccountChange}
+                className="w-full sm:w-auto"
               />
-              <button
-                onClick={() => setShowTradingSection(!showTradingSection)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-              >
-                {showTradingSection ? 'Hide Trading' : 'New Trade'}
-              </button>
-              <Link
-                href="/"
-                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-              >
-                Back to Dashboard
-              </Link>
+              {accountSettings && (
+                <div className="flex items-center space-x-2 bg-gray-800 px-3 py-2 rounded-lg border border-gray-600">
+                  <span className="text-sm text-gray-300 whitespace-nowrap">Trade Monitoring:</span>
+                  <button
+                    onClick={() => handleTradeMonitoringToggle(!accountSettings.trade_monitoring_enabled)}
+                    disabled={updatingTradeMonitoring}
+                    className={`w-12 h-6 rounded-full flex items-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      accountSettings.trade_monitoring_enabled ? "bg-green-600" : "bg-gray-600"
+                    } ${updatingTradeMonitoring ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <span
+                      className={`inline-block w-4 h-4 rounded-full bg-white shadow transform transition-transform ${
+                        accountSettings.trade_monitoring_enabled ? "translate-x-7" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                  {updatingTradeMonitoring && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b border-blue-600"></div>
+                  )}
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
+                <button
+                  onClick={() => setShowTradingSection(!showTradingSection)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full sm:w-auto"
+                >
+                  {showTradingSection ? 'Hide Trading' : 'New Trade'}
+                </button>
+                <Link
+                  href="/"
+                  className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors text-center w-full sm:w-auto"
+                >
+                  Back to Dashboard
+                </Link>
+              </div>
             </div>
           </div>
           
@@ -1127,10 +1292,9 @@ export default function PositionsPage() {
                   {positions.map((position) => {
                     const isExpanded = expandedPositions.has(position.ticket);
                     return (
-                      <>
+                      <React.Fragment key={position.ticket}>
                         {/* Main Position Row */}
                         <tr 
-                          key={position.ticket} 
                           className="hover:bg-gray-700 transition-colors cursor-pointer"
                           onClick={() => togglePositionExpansion(position.ticket)}
                         >
@@ -1160,7 +1324,7 @@ export default function PositionsPage() {
                             <div className="space-y-1">
                               <div className="text-sm">
                                 <span className="text-gray-400">Current:</span>
-                                <span className="ml-1 font-medium text-white">{position.current_price}</span>
+                                <span className="ml-1 font-medium text-white">{position.price_current}</span>
                               </div>
                               <div className="text-sm">
                                 <span className="text-gray-400">Profit:</span>
@@ -1171,7 +1335,11 @@ export default function PositionsPage() {
                               <div className="text-sm">
                                 <span className="text-gray-400">Pips:</span>
                                 <span className={`ml-1 font-medium ${getProfitColor(position.profit)}`}>
-                                  {calculatePips(position)}
+                                  {(() => {
+                                    const result = calculatePips(position);
+                                    console.log("Rendering pips for position", position.ticket, ":", result);
+                                    return result;
+                                  })()}
                                 </span>
                               </div>
                             </div>
@@ -1219,11 +1387,11 @@ export default function PositionsPage() {
                                   <div className="space-y-2">
                                     <div className="text-sm">
                                       <span className="text-gray-400">Open Price:</span>
-                                      <span className="ml-1 font-medium text-white">{position.open_price}</span>
+                                      <span className="ml-1 font-medium text-white">{position.price_open}</span>
                                     </div>
                                     <div className="text-sm">
                                       <span className="text-gray-400">Current Price:</span>
-                                      <span className="ml-1 font-medium text-white">{position.current_price}</span>
+                                      <span className="ml-1 font-medium text-white">{position.price_current}</span>
                                     </div>
                                     <div className="text-sm">
                                       <span className="text-gray-400">Stop Loss:</span>
@@ -1360,7 +1528,7 @@ export default function PositionsPage() {
                                   </div>
                                   <div>
                                     <span className="text-gray-400">Opened:</span>
-                                    <span className="ml-1 text-gray-300">{formatDateTime(position.open_time)}</span>
+                                    <span className="ml-1 text-gray-300">{position.open_time ? formatDateTime(position.open_time) : 'N/A'}</span>
                                   </div>
                                   <div>
                                     <span className="text-gray-400">Last Updated:</span>
@@ -1377,7 +1545,7 @@ export default function PositionsPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -1403,11 +1571,22 @@ export default function PositionsPage() {
               <div className="text-sm font-medium text-gray-400">Avg Pips</div>
               <div className="text-2xl font-bold text-white">
                 {positions.length > 0 ? (positions.reduce((sum, pos) => {
-                  const symbolConfig = symbolSettings.find(s => s.symbol === pos.symbol);
-                  if (!symbolConfig || !symbolConfig.price2pips) {
-                    return sum + Math.abs(pos.current_price - pos.open_price);
+                  const currentPrice = typeof pos.price_current === 'string' ? parseFloat(pos.price_current) : pos.price_current;
+                  const openPrice = typeof pos.price_open === 'string' ? parseFloat(pos.price_open) : pos.price_open;
+                  
+                  if (isNaN(currentPrice) || isNaN(openPrice)) {
+                    return sum;
                   }
-                  const priceDifference = Math.abs(pos.current_price - pos.open_price);
+                  
+                  const symbolConfig = symbolSettings.find(s => s.symbol === pos.symbol);
+                  if (!symbolConfig || symbolConfig.price2pips === 0) {
+                    // Use fallback calculation
+                    const pipValue = pos.symbol.includes('XAU') ? 0.1 : 0.0001;
+                    const priceDifference = Math.abs(currentPrice - openPrice);
+                    return sum + (priceDifference / pipValue);
+                  }
+                  
+                  const priceDifference = Math.abs(currentPrice - openPrice);
                   return sum + (priceDifference * symbolConfig.price2pips);
                 }, 0) / positions.length).toFixed(1) : '0.0'}
               </div>

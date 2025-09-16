@@ -211,23 +211,23 @@ export default function SymbolsPage() {
   };
 
   const handleSymbolChange = (symbolName: string, field: string, value: any) => {
-    const updatedSymbols = symbols.map(symbol => {
-      if (symbol.symbol === symbolName) {
-        return {
-          ...symbol,
-          [field]: value
-        };
-      }
-      return symbol;
-    });
-    
-    setSymbols(updatedSymbols);
+      const updatedSymbols = symbols.map(symbol => {
+        if (symbol.symbol === symbolName) {
+            return {
+              ...symbol,
+              [field]: value
+            };
+        }
+        return symbol;
+      });
+      
+      setSymbols(updatedSymbols);
     
     // Check if there are unsaved changes
     const hasChanges = JSON.stringify(updatedSymbols) !== JSON.stringify(originalSymbols);
     setHasUnsavedChanges(hasChanges);
-    
-    console.log(`Updated ${field} for symbol ${symbolName}:`, value);
+      
+      console.log(`Updated ${field} for symbol ${symbolName}:`, value);
   };
 
   const toggleSymbolExpansion = (symbolName: string) => {
@@ -320,13 +320,13 @@ export default function SymbolsPage() {
   return (
     <div className="min-h-screen bg-gray-900 p-4">
       <div className="max-w-6xl mx-auto">
-                 {/* Header */}
-         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
-           <div>
-             <h1 className="text-3xl font-bold text-white">Symbol Settings</h1>
-             <p className="text-gray-400 mt-1">Configure individual symbol parameters and trading rules</p>
-           </div>
-           <div className="flex flex-col sm:flex-row gap-2">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Symbol Settings</h1>
+            <p className="text-gray-400 mt-1">Configure individual symbol parameters and trading rules</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
              <AccountSelector 
                selectedAccount={selectedAccount}
                onAccountChange={handleAccountChange}
@@ -340,21 +340,21 @@ export default function SymbolsPage() {
                </svg>
                <span>Add Symbol</span>
              </button>
-             <Link 
-               href="/" 
-               className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-             >
-               Back to Dashboard
-             </Link>
-             <button 
+            <Link 
+              href="/" 
+              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+            >
+              Back to Dashboard
+            </Link>
+            <button 
                onClick={fetchSymbols} 
-               disabled={loading} 
-               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
-             >
-               {loading ? "Loading..." : "Refresh"}
-             </button>
-           </div>
-         </div>
+              disabled={loading} 
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
+        </div>
 
          {/* Save Changes Bar */}
          {hasUnsavedChanges && (
@@ -419,10 +419,10 @@ export default function SymbolsPage() {
           </div>
         )}
 
-                 {/* Symbols Grid */}
-         {symbols.length > 0 && (
+        {/* Symbols Grid */}
+        {symbols.length > 0 && (
            <div className="space-y-4">
-             {symbols.map((symbol) => (
+            {symbols.map((symbol) => (
                <div key={symbol.symbol} className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 overflow-hidden">
                  {/* Symbol Header - Always Visible */}
                  <div 
@@ -438,10 +438,10 @@ export default function SymbolsPage() {
                          ? 'bg-green-400' 
                          : 'bg-gray-500'
                      }`}></div>
-                     <div>
-                       <h3 className="text-lg font-semibold text-white">{symbol.symbol}</h3>
-                       <p className="text-sm text-gray-400">{symbol.name}</p>
-                     </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">{symbol.symbol}</h3>
+                    <p className="text-sm text-gray-400">{symbol.name}</p>
+                  </div>
                    </div>
                                        <div className="flex items-center space-x-3">
                       {/* Status Indicators */}
@@ -454,9 +454,9 @@ export default function SymbolsPage() {
                         )}
                         {symbol.profit_secure_enabled && (
                           <div className="w-2 h-2 rounded-full bg-purple-400" title="Profit Secure Enabled"></div>
-                        )}
-                      </div>
-                      
+                  )}
+                </div>
+
                       {/* Expand/Collapse Icon */}
                       <svg
                         className={`w-5 h-5 text-gray-400 transform transition-transform ${
@@ -475,14 +475,14 @@ export default function SymbolsPage() {
                  {expandedSymbols.has(symbol.symbol) && (
                    <div className="border-t border-gray-700 p-4">
                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                       {/* Basic Info */}
-                       <div className="space-y-3">
-                         <h4 className="text-sm font-medium text-blue-400 border-b border-gray-700 pb-1">Basic Info</h4>
-                         
-                         <div>
-                           <label className="block text-sm font-medium text-gray-300 mb-1">Standard Lot</label>
-                                                       <input
-                              type="number"
+                  {/* Basic Info */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-blue-400 border-b border-gray-700 pb-1">Basic Info</h4>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Standard Lot</label>
+                      <input
+                        type="number"
                               value={getInputValue(symbol.symbol, 'standard_lot', symbol.standard_lot)}
                               onChange={(e) => {
                                 const fieldKey = `${symbol.symbol}-standard_lot`;
@@ -491,15 +491,15 @@ export default function SymbolsPage() {
                               }}
                               onFocus={() => handleInputFocus(symbol.symbol, 'standard_lot', symbol.standard_lot)}
                               onBlur={(e) => handleInputBlur(symbol.symbol, 'standard_lot', e.target.value)}
-                              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              min="1"
-                            />
-                         </div>
-                         
-                         <div>
-                           <label className="block text-sm font-medium text-gray-300 mb-1">Digits</label>
-                                                       <input
-                              type="number"
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="1"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Digits</label>
+                      <input
+                        type="number"
                               value={getInputValue(symbol.symbol, 'digits', symbol.digits)}
                               onChange={(e) => {
                                 const fieldKey = `${symbol.symbol}-digits`;
@@ -508,9 +508,9 @@ export default function SymbolsPage() {
                               }}
                               onFocus={() => handleInputFocus(symbol.symbol, 'digits', symbol.digits)}
                               onBlur={(e) => handleInputBlur(symbol.symbol, 'digits', e.target.value)}
-                              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              min="0"
-                              max="10"
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="0"
+                        max="10"
                             />
                          </div>
                          
@@ -545,28 +545,28 @@ export default function SymbolsPage() {
                               onBlur={(e) => handleInputBlur(symbol.symbol, 'default_sl_pips', e.target.value)}
                               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                               min="0"
-                            />
-                         </div>
-                       </div>
+                      />
+                    </div>
+                  </div>
 
                        {/* Trading Features */}
                        <div className="space-y-4">
                          {/* Profit Lock Settings */}
-                         <div className="space-y-3">
+                  <div className="space-y-3">
                            <h4 className="text-sm font-medium text-green-400 border-b border-gray-700 pb-1">Profit Lock</h4>
-                           
-                                                       <ToggleButton
+                    
+                    <ToggleButton
                               checked={symbol.profit_lock_enabled}
                               onChange={(value) => handleSymbolChange(symbol.symbol, 'profit_lock_enabled', value)}
-                              label="Enabled"
-                            />
-                           
+                      label="Enabled"
+                    />
+                    
                            {symbol.profit_lock_enabled && (
-                             <>
-                               <div>
+                      <>
+                        <div>
                                  <label className="block text-sm font-medium text-gray-300 mb-1">Start Pips</label>
-                                                                   <input
-                                    type="number"
+                          <input
+                            type="number"
                                     value={getInputValue(symbol.symbol, 'profit_lock_start_pips', symbol.profit_lock_start_pips)}
                                     onChange={(e) => {
                                       const fieldKey = `${symbol.symbol}-profit_lock_start_pips`;
@@ -575,15 +575,15 @@ export default function SymbolsPage() {
                                     }}
                                     onFocus={() => handleInputFocus(symbol.symbol, 'profit_lock_start_pips', symbol.profit_lock_start_pips)}
                                     onBlur={(e) => handleInputBlur(symbol.symbol, 'profit_lock_start_pips', e.target.value)}
-                                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    min="0"
-                                  />
-                               </div>
-                               
-                               <div>
+                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            min="0"
+                          />
+                        </div>
+                        
+                        <div>
                                  <label className="block text-sm font-medium text-gray-300 mb-1">Distance Pips</label>
-                                                                   <input
-                                    type="number"
+                          <input
+                            type="number"
                                     value={getInputValue(symbol.symbol, 'profit_lock_distance_pips', symbol.profit_lock_distance_pips)}
                                     onChange={(e) => {
                                       const fieldKey = `${symbol.symbol}-profit_lock_distance_pips`;
@@ -592,10 +592,10 @@ export default function SymbolsPage() {
                                     }}
                                     onFocus={() => handleInputFocus(symbol.symbol, 'profit_lock_distance_pips', symbol.profit_lock_distance_pips)}
                                     onBlur={(e) => handleInputBlur(symbol.symbol, 'profit_lock_distance_pips', e.target.value)}
-                                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    min="0"
-                                  />
-                               </div>
+                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            min="0"
+                          />
+                        </div>
                              </>
                            )}
                          </div>
@@ -612,10 +612,10 @@ export default function SymbolsPage() {
                            
                            {symbol.sl_trailing_enabled && (
                              <>
-                               <div>
+                        <div>
                                  <label className="block text-sm font-medium text-gray-300 mb-1">Start Pips</label>
-                                                                   <input
-                                    type="number"
+                          <input
+                            type="number"
                                     value={getInputValue(symbol.symbol, 'sl_trailing_start_pips', symbol.sl_trailing_start_pips)}
                                     onChange={(e) => {
                                       const fieldKey = `${symbol.symbol}-sl_trailing_start_pips`;
@@ -624,15 +624,15 @@ export default function SymbolsPage() {
                                     }}
                                     onFocus={() => handleInputFocus(symbol.symbol, 'sl_trailing_start_pips', symbol.sl_trailing_start_pips)}
                                     onBlur={(e) => handleInputBlur(symbol.symbol, 'sl_trailing_start_pips', e.target.value)}
-                                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     min="0"
-                                  />
-                               </div>
-                               
-                               <div>
+                          />
+                        </div>
+                        
+                        <div>
                                  <label className="block text-sm font-medium text-gray-300 mb-1">Distance Pips</label>
-                                                                   <input
-                                    type="number"
+                          <input
+                            type="number"
                                     value={getInputValue(symbol.symbol, 'sl_trailing_distance_pips', symbol.sl_trailing_distance_pips)}
                                     onChange={(e) => {
                                       const fieldKey = `${symbol.symbol}-sl_trailing_distance_pips`;
@@ -641,12 +641,12 @@ export default function SymbolsPage() {
                                     }}
                                     onFocus={() => handleInputFocus(symbol.symbol, 'sl_trailing_distance_pips', symbol.sl_trailing_distance_pips)}
                                     onBlur={(e) => handleInputBlur(symbol.symbol, 'sl_trailing_distance_pips', e.target.value)}
-                                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    min="0"
-                                  />
-                               </div>
-                             </>
-                           )}
+                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            min="0"
+                          />
+                        </div>
+                      </>
+                    )}
                          </div>
 
                          {/* Profit Secure Settings */}
@@ -659,14 +659,14 @@ export default function SymbolsPage() {
                               label="Enabled"
                             />
                          </div>
-                       </div>
-                     </div>
+                  </div>
+                </div>
                    </div>
                  )}
-               </div>
-             ))}
-           </div>
-         )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Empty State */}
         {!loading && symbols.length === 0 && (
