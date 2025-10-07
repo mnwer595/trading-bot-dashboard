@@ -16,6 +16,7 @@ type LogEntry = {
   timestamp: string;
   type: string;
   data: string;
+  account_id?: string;
 };
 
 type LogResponse = {
@@ -160,7 +161,10 @@ export default function LogMonitoringPage() {
     
     // Apply account ID filtering
     if (accountIdFilters.length > 0) {
-      filteredLogs = filteredLogs.filter(log => accountIdFilters.includes(log.account_id));
+      filteredLogs = filteredLogs.filter(log => {
+        // If log has account_id, filter by it; otherwise include all logs
+        return log.account_id ? accountIdFilters.includes(log.account_id) : true;
+      });
     }
     
     // Apply sorting
@@ -251,7 +255,9 @@ export default function LogMonitoringPage() {
       if (sortField === "timestamp") {
         comparison = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
       } else if (sortField === "account_id") {
-        comparison = a.account_id.localeCompare(b.account_id);
+        const aAccountId = a.account_id || "";
+        const bAccountId = b.account_id || "";
+        comparison = aAccountId.localeCompare(bAccountId);
       }
       
       return order === "asc" ? comparison : -comparison;
@@ -651,7 +657,7 @@ export default function LogMonitoringPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                            {log.account_id}
+                            {log.account_id || "N/A"}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

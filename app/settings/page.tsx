@@ -14,6 +14,7 @@ type Settings = {
   webhook_enabled: boolean;
   risk_percentage: number;
   lot_size: number;
+  lot_factor: number;
   default_sl_pips: number;
   risk_reward_ratio: number;
   trading_hours: {
@@ -70,6 +71,7 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<string>("test");
+  const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -105,6 +107,7 @@ export default function SettingsPage() {
       
       setSettings(data);
       setError(null);
+      setHasChanges(false);
     } catch (err: any) {
       console.error("Error fetching settings:", err);
       setError(err.message);
@@ -143,32 +146,24 @@ export default function SettingsPage() {
     }
   };
 
-  const handleToggleChange = async (key: string, value: boolean) => {
+  const handleToggleChange = (key: string, value: boolean) => {
     if (!settings) return;
 
-    try {
-      const updatedSettings = { ...settings };
-      
-      // Handle nested objects
-      if (key.includes('.')) {
-        const [parent, child] = key.split('.');
-        (updatedSettings as any)[parent] = {
-          ...(updatedSettings as any)[parent],
-          [child]: value
-        };
-      } else {
-        (updatedSettings as any)[key] = value;
-      }
-
-      setSettings(updatedSettings);
-      await saveSettings(updatedSettings);
-      setSaveMessage("Settings saved successfully!");
-      setTimeout(() => setSaveMessage(null), 3000);
-    } catch (err) {
-      console.error("Error updating toggle:", err);
-      setSaveMessage("Error saving settings");
-      setTimeout(() => setSaveMessage(null), 3000);
+    const updatedSettings = { ...settings };
+    
+    // Handle nested objects
+    if (key.includes('.')) {
+      const [parent, child] = key.split('.');
+      (updatedSettings as any)[parent] = {
+        ...(updatedSettings as any)[parent],
+        [child]: value
+      };
+    } else {
+      (updatedSettings as any)[key] = value;
     }
+
+    setSettings(updatedSettings);
+    setHasChanges(true);
   };
 
   const handleNumberChange = (key: string, value: number) => {
@@ -188,6 +183,7 @@ export default function SettingsPage() {
     }
 
     setSettings(updatedSettings);
+    setHasChanges(true);
   };
 
   const handleManualSave = async () => {
@@ -197,6 +193,7 @@ export default function SettingsPage() {
     try {
       await saveSettings(settings);
       setSaveMessage("Settings saved successfully!");
+      setHasChanges(false);
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (err) {
       console.error("Error saving settings:", err);
@@ -205,6 +202,26 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSelectChange = (key: string, value: string) => {
+    if (!settings) return;
+
+    const updatedSettings = { ...settings };
+    
+    // Handle nested objects
+    if (key.includes('.')) {
+      const [parent, child] = key.split('.');
+      (updatedSettings as any)[parent] = {
+        ...(updatedSettings as any)[parent],
+        [child]: value
+      };
+    } else {
+      (updatedSettings as any)[key] = value;
+    }
+
+    setSettings(updatedSettings);
+    setHasChanges(true);
   };
 
   const ToggleButton = ({ 
@@ -305,6 +322,19 @@ export default function SettingsPage() {
         {/* Settings Form */}
         {settings && (
           <div className="bg-gray-800 border border-gray-700 rounded-lg shadow p-6">
+            {/* Save Button - Only show when there are changes */}
+            {hasChanges && (
+              <div className="mb-6 flex justify-center">
+                <button 
+                  onClick={handleManualSave} 
+                  disabled={saving} 
+                  className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {saving ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Trading Settings */}
               <div className="space-y-6">
@@ -340,11 +370,15 @@ export default function SettingsPage() {
                     <label className="block text-sm font-medium text-gray-300 mb-1">Risk Percentage (%)</label>
                     <input
                       type="number"
-                      value={settings.risk_percentage}
-                      onChange={(e) => handleNumberChange('risk_percentage', Number(e.target.value))}
+                      value={settings.risk_percentage || ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? 0 : Number(e.target.value);
+                        handleNumberChange('risk_percentage', value);
+                      }}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min="1"
+                      min="0"
                       max="100"
+                      placeholder="1"
                     />
                   </div>
                   
@@ -353,21 +387,46 @@ export default function SettingsPage() {
                     <input
                       type="number"
                       step="0.01"
-                      value={settings.lot_size}
-                      onChange={(e) => handleNumberChange('lot_size', Number(e.target.value))}
+                      value={settings.lot_size || ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? 0 : Number(e.target.value);
+                        handleNumberChange('lot_size', value);
+                      }}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min="0.01"
+                      min="0"
+                      placeholder="0.01"
                     />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Lot Factor</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={settings.lot_factor || ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? 0 : Number(e.target.value);
+                        handleNumberChange('lot_factor', value);
+                      }}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="0"
+                      placeholder="1.0"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Multiplier for lot size (e.g., 2.0 doubles the lot size)</p>
                   </div>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">Default SL (Pips)</label>
                     <input
                       type="number"
-                      value={settings.default_sl_pips}
-                      onChange={(e) => handleNumberChange('default_sl_pips', Number(e.target.value))}
+                      value={settings.default_sl_pips || ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? 0 : Number(e.target.value);
+                        handleNumberChange('default_sl_pips', value);
+                      }}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min="1"
+                      min="0"
+                      placeholder="1"
                     />
                   </div>
                   
@@ -376,10 +435,14 @@ export default function SettingsPage() {
                     <input
                       type="number"
                       step="0.1"
-                      value={settings.risk_reward_ratio}
-                      onChange={(e) => handleNumberChange('risk_reward_ratio', Number(e.target.value))}
+                      value={settings.risk_reward_ratio || ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? 0 : Number(e.target.value);
+                        handleNumberChange('risk_reward_ratio', value);
+                      }}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min="0.1"
+                      min="0"
+                      placeholder="0.1"
                     />
                   </div>
                 </div>
@@ -433,31 +496,35 @@ export default function SettingsPage() {
                         <label className="block text-sm font-medium text-gray-300 mb-1">Interval (Minutes)</label>
                         <input
                           type="number"
-                          value={settings.algo_trading?.interval_minutes || 0}
-                          onChange={(e) => handleNumberChange('algo_trading.interval_minutes', Number(e.target.value))}
+                          value={settings.algo_trading?.interval_minutes || ''}
+                          onChange={(e) => {
+                            const value = e.target.value === '' ? 0 : Number(e.target.value);
+                            handleNumberChange('algo_trading.interval_minutes', value);
+                          }}
                           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          min="1"
+                          min="0"
+                          placeholder="1"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">Interval (Seconds)</label>
                         <input
                           type="number"
-                          value={settings.algo_trading?.interval_seconds || 0}
-                          onChange={(e) => handleNumberChange('algo_trading.interval_seconds', Number(e.target.value))}
+                          value={settings.algo_trading?.interval_seconds || ''}
+                          onChange={(e) => {
+                            const value = e.target.value === '' ? 0 : Number(e.target.value);
+                            handleNumberChange('algo_trading.interval_seconds', value);
+                          }}
                           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          min="1"
+                          min="0"
+                          placeholder="1"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">Lot Mode</label>
                         <select
                           value={settings.algo_trading?.lot_mode || 'static'}
-                          onChange={(e) => {
-                            const updatedSettings = { ...settings };
-                            updatedSettings.algo_trading.lot_mode = e.target.value;
-                            setSettings(updatedSettings);
-                          }}
+                          onChange={(e) => handleSelectChange('algo_trading.lot_mode', e.target.value)}
                           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="static">Static</option>
@@ -567,13 +634,7 @@ export default function SettingsPage() {
                        <label className="block text-sm font-medium text-gray-300 mb-1">Mode</label>
                        <select
                          value={settings.profit_secure?.mode || 'percentage'}
-                         onChange={(e) => {
-                           const updatedSettings = { ...settings };
-                           if (updatedSettings.profit_secure) {
-                             updatedSettings.profit_secure.mode = e.target.value;
-                           }
-                           setSettings(updatedSettings);
-                         }}
+                         onChange={(e) => handleSelectChange('profit_secure.mode', e.target.value)}
                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                        >
                          <option value="percentage">Percentage</option>
@@ -690,11 +751,7 @@ export default function SettingsPage() {
                        <input
                          type="text"
                          value={settings.profit_secure?.chat_id || ''}
-                         onChange={(e) => {
-                           const updatedSettings = { ...settings };
-                           updatedSettings.profit_secure.chat_id = e.target.value;
-                           setSettings(updatedSettings);
-                         }}
+                         onChange={(e) => handleSelectChange('profit_secure.chat_id', e.target.value)}
                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                        />
                      </div>
@@ -748,17 +805,6 @@ export default function SettingsPage() {
                   )}
                 </div>
               </div>
-            </div>
-            
-            {/* Save Button */}
-            <div className="mt-8 flex justify-center">
-              <button 
-                onClick={handleManualSave} 
-                disabled={saving} 
-                className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {saving ? "Saving..." : "Save Number Settings"}
-              </button>
             </div>
           </div>
         )}
