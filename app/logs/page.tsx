@@ -14,18 +14,17 @@ type Account = {
 
 type LogEntry = {
   timestamp: string;
-  data: any;
-  source: string;
-  account_id: string;
+  type: string;
+  data: string;
 };
 
 type LogResponse = {
   status: string;
   account_id: string;
   log_type: string;
-  total_logs: number;
   limit: number;
   source_filter?: string;
+  total_logs: number;
   logs: LogEntry[];
 };
 
@@ -47,46 +46,12 @@ export default function LogMonitoringPage() {
   const [availableLogTypes, setAvailableLogTypes] = useState<string[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>("all");
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
 
   // Centralized function to determine log type from log entry
   const getLogType = (log: LogEntry): string => {
-    // If log has a logType field, use it
-    if ((log as any).logType) {
-      return (log as any).logType;
-    }
-    
-    // Check if the log data has a type field
-    if (log.data && typeof log.data === 'object' && log.data.type) {
-      return log.data.type;
-    }
-    
-    // Infer from source field
-    const source = log.source.toLowerCase();
-    if (source.includes('webhook')) return 'webhook';
-    if (source.includes('trade')) return 'trade';
-    if (source.includes('error')) return 'error';
-    if (source.includes('system')) return 'system';
-    if (source.includes('user')) return 'user';
-    if (source.includes('security')) return 'security';
-    if (source.includes('mt5')) return 'trade';
-    if (source.includes('handler')) return 'system';
-    if (source.includes('monitor')) return 'system';
-    if (source.includes('position')) return 'trade';
-    if (source.includes('order')) return 'trade';
-    if (source.includes('signal')) return 'webhook';
-    if (source.includes('alert')) return 'system';
-    if (source.includes('notification')) return 'system';
-    
-    // Check log data content for additional clues
-    if (log.data && typeof log.data === 'object') {
-      const dataStr = JSON.stringify(log.data).toLowerCase();
-      if (dataStr.includes('buy') || dataStr.includes('sell') || dataStr.includes('order')) return 'trade';
-      if (dataStr.includes('error') || dataStr.includes('exception') || dataStr.includes('failed')) return 'error';
-      if (dataStr.includes('login') || dataStr.includes('auth') || dataStr.includes('permission')) return 'security';
-      if (dataStr.includes('start') || dataStr.includes('stop') || dataStr.includes('status')) return 'system';
-    }
-    
-    return 'unknown';
+    // Use the new 'type' field directly
+    return log.type;
   };
 
   // Function to get appropriate color for log type
@@ -129,15 +94,10 @@ export default function LogMonitoringPage() {
       setLoading(true);
       setError(null);
 
-      // Fetch logs based on selected account
+      // Use the new /logs endpoint
       const url = new URL(`${API_URL}/logs`);
       if (logLimit) {
         url.searchParams.append('limit', logLimit.toString());
-      }
-      
-      // Add account_id parameter if not "all"
-      if (selectedAccount !== "all") {
-        url.searchParams.append('account_id', selectedAccount);
       }
 
       console.log("Fetching logs from:", url.toString());
@@ -163,8 +123,8 @@ export default function LogMonitoringPage() {
         
         setAllLogs(allFetchedLogs);
         
-        // Extract log types from the data using centralized function
-        const logTypes = [...new Set(allFetchedLogs.map(log => getLogType(log)))];
+        // Extract log types from the data using the new 'type' field
+        const logTypes = [...new Set(allFetchedLogs.map(log => log.type))];
         
         setAvailableLogTypes(logTypes);
         
@@ -315,6 +275,34 @@ export default function LogMonitoringPage() {
         .join(', ');
     }
     return String(data);
+  };
+
+  const TRUNCATE_LENGTH = 200; // Character limit for truncated text
+
+  const toggleLogExpansion = (logId: string) => {
+    const newExpandedLogs = new Set(expandedLogs);
+    if (newExpandedLogs.has(logId)) {
+      newExpandedLogs.delete(logId);
+    } else {
+      newExpandedLogs.add(logId);
+    }
+    setExpandedLogs(newExpandedLogs);
+  };
+
+  const getTruncatedData = (data: any, logId: string) => {
+    const formattedData = formatLogData(data);
+    const isExpanded = expandedLogs.has(logId);
+    
+    if (formattedData.length <= TRUNCATE_LENGTH || isExpanded) {
+      return formattedData;
+    }
+    
+    return formattedData.substring(0, TRUNCATE_LENGTH) + '...';
+  };
+
+  const shouldShowSeeMore = (data: any) => {
+    const formattedData = formatLogData(data);
+    return formattedData.length > TRUNCATE_LENGTH;
   };
 
   useEffect(() => {
@@ -674,8 +662,16 @@ export default function LogMonitoringPage() {
                         <td className="px-6 py-4 text-sm text-gray-300">
                           <div className="max-w-md">
                             <pre className="whitespace-pre-wrap break-words text-xs bg-gray-700 p-2 rounded">
-                              {formatLogData(log.data)}
+                              {getTruncatedData(log.data, `${log.timestamp}-${index}`)}
                             </pre>
+                            {shouldShowSeeMore(log.data) && (
+                              <button
+                                onClick={() => toggleLogExpansion(`${log.timestamp}-${index}`)}
+                                className="mt-2 text-xs text-blue-400 hover:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1 transition-colors"
+                              >
+                                {expandedLogs.has(`${log.timestamp}-${index}`) ? 'See Less' : 'See More'}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
