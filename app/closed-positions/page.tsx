@@ -11,9 +11,9 @@ type ClosedPosition = {
   symbol: string;
   type: "Buy" | "Sell";
   volume: number;
-  price_open: number;
-  price_close: number;
-  profit: number;
+  price_open: number | null;
+  price_close: number | null;
+  profit: number | null;
   comment: string;
   time: string;
   time_msc: number;
@@ -47,8 +47,53 @@ export default function ClosedPositionsPage() {
   const [sortField, setSortField] = useState<SortField>("time");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  // Get unique symbols for filter dropdown
+  // Get unique symbols and comments for filter dropdowns
   const uniqueSymbols = Array.from(new Set(positions.map(pos => pos.symbol))).sort();
+  const uniqueComments = Array.from(new Set(positions.map(pos => pos.comment).filter(comment => comment))).sort();
+
+  const handleLastWeekShortcut = () => {
+    const today = new Date();
+    const lastWeek = new Date(today);
+    lastWeek.setDate(today.getDate() - 7);
+    
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    setStartDate(formatDate(lastWeek));
+    setEndDate(formatDate(today));
+  };
+
+  const handleTodayShortcut = () => {
+    const today = new Date();
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    setStartDate(formatDate(today));
+    setEndDate(formatDate(today));
+  };
+
+  const handleThisMonthShortcut = () => {
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    setStartDate(formatDate(firstDayOfMonth));
+    setEndDate(formatDate(today));
+  };
 
   const fetchClosedPositions = async () => {
     setLoading(true);
@@ -113,8 +158,8 @@ export default function ClosedPositionsPage() {
           bValue = b.symbol;
           break;
         case "profit":
-          aValue = a.profit;
-          bValue = b.profit;
+          aValue = a.profit ?? 0;
+          bValue = b.profit ?? 0;
           break;
         case "volume":
           aValue = a.volume;
@@ -161,7 +206,8 @@ export default function ClosedPositionsPage() {
     return new Date(dateString).toLocaleString();
   };
 
-  const getProfitColor = (profit: number) => {
+  const getProfitColor = (profit: number | null) => {
+    if (profit == null) return "text-gray-400";
     return profit >= 0 ? "text-green-400" : "text-red-400";
   };
 
@@ -169,27 +215,153 @@ export default function ClosedPositionsPage() {
     return type === "Buy" ? "text-green-400" : "text-red-400";
   };
 
+  // Calculate statistics by comment
+  const getStatsByComment = () => {
+    const statsByComment: {
+      [key: string]: {
+        totalTrades: number;
+        winningTrades: number;
+        losingTrades: number;
+        totalProfit: number;
+        totalGain: number;
+        totalLoss: number;
+        winRate: number;
+        avgProfit: number;
+      };
+    } = {};
+
+    filteredAndSortedPositions.forEach(position => {
+      const comment = position.comment || "No Comment";
+      
+      if (!statsByComment[comment]) {
+        statsByComment[comment] = {
+          totalTrades: 0,
+          winningTrades: 0,
+          losingTrades: 0,
+          totalProfit: 0,
+          totalGain: 0,
+          totalLoss: 0,
+          winRate: 0,
+          avgProfit: 0,
+        };
+      }
+
+      statsByComment[comment].totalTrades++;
+      const profit = position.profit || 0;
+      statsByComment[comment].totalProfit += profit;
+      
+      if (profit > 0) {
+        statsByComment[comment].winningTrades++;
+        statsByComment[comment].totalGain += profit;
+      } else if (profit < 0) {
+        statsByComment[comment].losingTrades++;
+        statsByComment[comment].totalLoss += profit;
+      }
+    });
+
+    // Calculate win rate and average profit
+    Object.keys(statsByComment).forEach(comment => {
+      const stats = statsByComment[comment];
+      stats.winRate = stats.totalTrades > 0 
+        ? (stats.winningTrades / stats.totalTrades) * 100 
+        : 0;
+      stats.avgProfit = stats.totalTrades > 0 
+        ? stats.totalProfit / stats.totalTrades 
+        : 0;
+    });
+
+    return statsByComment;
+  };
+
+  const statsByComment = getStatsByComment();
+
   return (
     <div className="min-h-screen bg-gray-900 p-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-center justify-between mb-8">
-          <div>
-            <Link href="/" className="text-blue-400 hover:text-blue-300 mb-4 inline-block">
-              ← Back to Dashboard
-            </Link>
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">Closed Positions History</h1>
-            <p className="text-xl text-gray-400">View and analyze your trading history</p>
+        <div className="mb-8">
+          <Link href="/" className="text-blue-400 hover:text-blue-300 mb-4 inline-block">
+            ← Back to Dashboard
+          </Link>
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">Closed Positions History</h1>
+          <p className="text-xl text-gray-400">View and analyze your trading history</p>
+        </div>
+
+        {/* Summary Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+            <div className="text-sm font-medium text-gray-400">Total Positions</div>
+            <div className="text-2xl font-bold text-white">{filteredAndSortedPositions.length}</div>
           </div>
-          <div className="text-right mt-4 sm:mt-0">
-            <div className="text-2xl font-bold text-white">{totalPositions}</div>
-            <div className="text-sm text-gray-400">Total Positions</div>
+          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+            <div className="text-sm font-medium text-gray-400">Net Profit/Loss</div>
+            <div className={`text-2xl font-bold ${getProfitColor(filteredAndSortedPositions.reduce((sum, pos) => sum + (pos.profit || 0), 0))}`}>
+              {formatCurrency(filteredAndSortedPositions.reduce((sum, pos) => sum + (pos.profit || 0), 0))}
+            </div>
+          </div>
+          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+            <div className="text-sm font-medium text-gray-400">Total Profit</div>
+            <div className="text-2xl font-bold text-green-400">
+              {formatCurrency(
+                filteredAndSortedPositions
+                  .filter(pos => pos.profit != null && pos.profit > 0)
+                  .reduce((sum, pos) => sum + (pos.profit || 0), 0)
+              )}
+            </div>
+          </div>
+          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+            <div className="text-sm font-medium text-gray-400">Total Loss</div>
+            <div className="text-2xl font-bold text-red-400">
+              {formatCurrency(
+                filteredAndSortedPositions
+                  .filter(pos => pos.profit != null && pos.profit < 0)
+                  .reduce((sum, pos) => sum + (pos.profit || 0), 0)
+              )}
+            </div>
+          </div>
+          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+            <div className="text-sm font-medium text-gray-400">Winning Trades</div>
+            <div className="text-2xl font-bold text-green-400">
+              {filteredAndSortedPositions.filter(pos => pos.profit != null && pos.profit > 0).length}
+            </div>
+          </div>
+          <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
+            <div className="text-sm font-medium text-gray-400">Losing Trades</div>
+            <div className="text-2xl font-bold text-red-400">
+              {filteredAndSortedPositions.filter(pos => pos.profit != null && pos.profit < 0).length}
+            </div>
           </div>
         </div>
 
         {/* Filters */}
         <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-8 border border-gray-700">
           <h2 className="text-xl font-semibold text-white mb-4">Filters</h2>
+          
+          {/* Date Shortcuts */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">Quick Date Selection</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleTodayShortcut}
+                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Today
+              </button>
+              <button
+                onClick={handleLastWeekShortcut}
+                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Last Week
+              </button>
+              <button
+                onClick={handleThisMonthShortcut}
+                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                This Month
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* Date Range */}
             <div>
@@ -229,13 +401,16 @@ export default function ClosedPositionsPage() {
             {/* Comment Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Comment</label>
-              <input
-                type="text"
+              <select
                 value={commentFilter}
                 onChange={(e) => setCommentFilter(e.target.value)}
-                placeholder="Filter by comment..."
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              >
+                <option value="">All Comments</option>
+                {uniqueComments.map(comment => (
+                  <option key={comment} value={comment}>{comment}</option>
+                ))}
+              </select>
             </div>
 
             {/* Search Button */}
@@ -250,6 +425,157 @@ export default function ClosedPositionsPage() {
             </div>
           </div>
         </div>
+
+        {/* Statistics by Comment */}
+        {filteredAndSortedPositions.length > 0 && Object.keys(statsByComment).length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-white mb-4">Statistics by Comment</h2>
+            <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-700">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Comment
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Total Trades
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Winning
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Losing
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Win Rate
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Total Gain
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Total Loss
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Net Profit
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Avg Profit
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-gray-800 divide-y divide-gray-700">
+                    {Object.entries(statsByComment)
+                      .sort((a, b) => b[1].totalProfit - a[1].totalProfit)
+                      .map(([comment, stats]) => (
+                        <tr key={comment} className="hover:bg-gray-700 transition-colors duration-150">
+                          <td className="px-4 py-4 text-sm font-medium text-white">
+                            {comment}
+                          </td>
+                          <td className="px-4 py-4 text-sm text-center text-gray-300">
+                            {stats.totalTrades}
+                          </td>
+                          <td className="px-4 py-4 text-sm text-center">
+                            <span className="text-green-400 font-medium">
+                              {stats.winningTrades}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-center">
+                            <span className="text-red-400 font-medium">
+                              {stats.losingTrades}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-center">
+                            <span className={`font-medium ${stats.winRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>
+                              {stats.winRate.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-right">
+                            <span className="font-medium text-green-400">
+                              {formatCurrency(stats.totalGain)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-right">
+                            <span className="font-medium text-red-400">
+                              {formatCurrency(stats.totalLoss)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-right">
+                            <span className={`font-medium ${getProfitColor(stats.totalProfit)}`}>
+                              {formatCurrency(stats.totalProfit)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-right">
+                            <span className={`font-medium ${getProfitColor(stats.avgProfit)}`}>
+                              {formatCurrency(stats.avgProfit)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                  <tfoot className="bg-gray-700">
+                    <tr>
+                      <td className="px-4 py-4 text-sm font-bold text-white">
+                        TOTAL
+                      </td>
+                      <td className="px-4 py-4 text-sm text-center font-bold text-white">
+                        {filteredAndSortedPositions.length}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-center font-bold text-green-400">
+                        {filteredAndSortedPositions.filter(pos => pos.profit != null && pos.profit > 0).length}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-center font-bold text-red-400">
+                        {filteredAndSortedPositions.filter(pos => pos.profit != null && pos.profit < 0).length}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-center font-bold text-white">
+                        {filteredAndSortedPositions.length > 0
+                          ? ((filteredAndSortedPositions.filter(pos => pos.profit != null && pos.profit > 0).length / 
+                             filteredAndSortedPositions.length) * 100).toFixed(1)
+                          : 0}%
+                      </td>
+                      <td className="px-4 py-4 text-sm text-right">
+                        <span className="font-bold text-green-400">
+                          {formatCurrency(
+                            filteredAndSortedPositions
+                              .filter(pos => pos.profit != null && pos.profit > 0)
+                              .reduce((sum, pos) => sum + (pos.profit || 0), 0)
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-right">
+                        <span className="font-bold text-red-400">
+                          {formatCurrency(
+                            filteredAndSortedPositions
+                              .filter(pos => pos.profit != null && pos.profit < 0)
+                              .reduce((sum, pos) => sum + (pos.profit || 0), 0)
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-right">
+                        <span className={`font-bold ${getProfitColor(filteredAndSortedPositions.reduce((sum, pos) => sum + (pos.profit || 0), 0))}`}>
+                          {formatCurrency(filteredAndSortedPositions.reduce((sum, pos) => sum + (pos.profit || 0), 0))}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-right">
+                        <span className={`font-bold ${getProfitColor(
+                          filteredAndSortedPositions.length > 0 
+                            ? filteredAndSortedPositions.reduce((sum, pos) => sum + (pos.profit || 0), 0) / filteredAndSortedPositions.length
+                            : 0
+                        )}`}>
+                          {formatCurrency(
+                            filteredAndSortedPositions.length > 0 
+                              ? filteredAndSortedPositions.reduce((sum, pos) => sum + (pos.profit || 0), 0) / filteredAndSortedPositions.length
+                              : 0
+                          )}
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (
@@ -378,14 +704,14 @@ export default function ClosedPositionsPage() {
                         {position.volume}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {position.price_open.toFixed(5)}
+                        {position.price_open != null ? position.price_open.toFixed(5) : "N/A"}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {position.price_close.toFixed(5)}
+                        {position.price_close != null ? position.price_close.toFixed(5) : "N/A"}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
                         <span className={getProfitColor(position.profit)}>
-                          {formatCurrency(position.profit)}
+                          {position.profit != null ? formatCurrency(position.profit) : "N/A"}
                         </span>
                       </td>
                       <td className="px-4 py-4 text-sm text-gray-300 max-w-xs truncate">
@@ -398,34 +724,6 @@ export default function ClosedPositionsPage() {
             </table>
           </div>
         </div>
-
-        {/* Summary Stats */}
-        {filteredAndSortedPositions.length > 0 && (
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
-              <div className="text-sm font-medium text-gray-400">Total Positions</div>
-              <div className="text-2xl font-bold text-white">{filteredAndSortedPositions.length}</div>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
-              <div className="text-sm font-medium text-gray-400">Total Profit</div>
-              <div className={`text-2xl font-bold ${getProfitColor(filteredAndSortedPositions.reduce((sum, pos) => sum + pos.profit, 0))}`}>
-                {formatCurrency(filteredAndSortedPositions.reduce((sum, pos) => sum + pos.profit, 0))}
-              </div>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
-              <div className="text-sm font-medium text-gray-400">Winning Trades</div>
-              <div className="text-2xl font-bold text-green-400">
-                {filteredAndSortedPositions.filter(pos => pos.profit > 0).length}
-              </div>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
-              <div className="text-sm font-medium text-gray-400">Losing Trades</div>
-              <div className="text-2xl font-bold text-red-400">
-                {filteredAndSortedPositions.filter(pos => pos.profit < 0).length}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
