@@ -7,47 +7,52 @@ echo.
 echo [1/5] Discarding all current changes...
 git reset --hard HEAD
 if %errorlevel% neq 0 (
-    echo ERROR: Failed to reset changes
-    pause
-    exit /b 1
+    echo WARNING: Failed to reset changes, continuing anyway...
+) else (
+    echo ✓ Changes discarded
 )
-echo ✓ Changes discarded
 
 echo.
 echo [2/5] Cleaning untracked files...
 git clean -fd
 if %errorlevel% neq 0 (
-    echo ERROR: Failed to clean untracked files
-    pause
-    exit /b 1
+    echo WARNING: Failed to clean untracked files, continuing anyway...
+) else (
+    echo ✓ Untracked files cleaned
 )
-echo ✓ Untracked files cleaned
 
 echo.
 echo [3/5] Force pulling latest changes from remote...
 git pull --force
 if %errorlevel% neq 0 (
-    echo ERROR: Failed to pull from remote
-    pause
-    exit /b 1
+    echo WARNING: Failed to pull from remote, continuing with current code...
+) else (
+    echo ✓ Latest changes pulled
 )
-echo ✓ Latest changes pulled
 
 echo.
 echo [4/5] Building the project...
+echo This may take a few moments...
 npm run build
 if %errorlevel% neq 0 (
-    echo ERROR: Build failed
-    pause
+    echo ERROR: Build failed - cannot start server
+    echo Check the error messages above
+    echo.
+    echo Press any key to exit...
+    pause >nul
     exit /b 1
 )
 echo ✓ Build completed successfully
 
 echo.
 echo [5/5] Starting the application...
+echo.
+echo ========================================
+echo   Server Starting...
+echo ========================================
 echo Starting server on http://localhost:3000
 echo Press Ctrl+C to stop the server
 echo.
+echo Waiting for server to start...
+timeout /t 2 /nobreak >nul
 npm run start
-
-pause
