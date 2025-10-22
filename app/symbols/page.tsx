@@ -201,14 +201,14 @@ export default function SymbolsPage() {
       // Convert string values to numbers for numeric fields
       const processedSymbol = {
         ...newSymbol,
-        standard_lot: newSymbol.standard_lot === '' ? 100000 : Number(newSymbol.standard_lot) || 100000,
-        digits: newSymbol.digits === '' ? 5 : Number(newSymbol.digits) || 5,
-        price2pips: newSymbol.price2pips === '' ? 100000 : Number(newSymbol.price2pips) || 100000,
-        default_sl_pips: newSymbol.default_sl_pips === '' ? 0 : Number(newSymbol.default_sl_pips) || 0,
-        profit_lock_start_pips: newSymbol.profit_lock_start_pips === '' ? 0 : Number(newSymbol.profit_lock_start_pips) || 0,
-        profit_lock_distance_pips: newSymbol.profit_lock_distance_pips === '' ? 0 : Number(newSymbol.profit_lock_distance_pips) || 0,
-        sl_trailing_start_pips: newSymbol.sl_trailing_start_pips === '' ? 0 : Number(newSymbol.sl_trailing_start_pips) || 0,
-        sl_trailing_distance_pips: newSymbol.sl_trailing_distance_pips === '' ? 0 : Number(newSymbol.sl_trailing_distance_pips) || 0,
+        standard_lot: (newSymbol.standard_lot as any) === '' ? 100000 : Number(newSymbol.standard_lot) || 100000,
+        digits: (newSymbol.digits as any) === '' ? 5 : Number(newSymbol.digits) || 5,
+        price2pips: (newSymbol.price2pips as any) === '' ? 100000 : Number(newSymbol.price2pips) || 100000,
+        default_sl_pips: (newSymbol.default_sl_pips as any) === '' ? 0 : Number(newSymbol.default_sl_pips) || 0,
+        profit_lock_start_pips: (newSymbol.profit_lock_start_pips as any) === '' ? 0 : Number(newSymbol.profit_lock_start_pips) || 0,
+        profit_lock_distance_pips: (newSymbol.profit_lock_distance_pips as any) === '' ? 0 : Number(newSymbol.profit_lock_distance_pips) || 0,
+        sl_trailing_start_pips: (newSymbol.sl_trailing_start_pips as any) === '' ? 0 : Number(newSymbol.sl_trailing_start_pips) || 0,
+        sl_trailing_distance_pips: (newSymbol.sl_trailing_distance_pips as any) === '' ? 0 : Number(newSymbol.sl_trailing_distance_pips) || 0,
       };
       
       const symbolToAdd = cleanSymbolData(processedSymbol);
