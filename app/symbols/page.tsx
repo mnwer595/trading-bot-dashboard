@@ -177,6 +177,14 @@ export default function SymbolsPage() {
     }));
   };
 
+  const handleNewSymbolNumberChange = (field: string, value: string) => {
+    // Allow empty string and 0 values, store as string to preserve user input
+    setNewSymbol(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
   const handleCreateSymbol = async () => {
     if (!newSymbol.symbol || !newSymbol.name) {
       setError('Symbol and name are required');
@@ -190,7 +198,20 @@ export default function SymbolsPage() {
     }
 
     try {
-      const symbolToAdd = cleanSymbolData(newSymbol);
+      // Convert string values to numbers for numeric fields
+      const processedSymbol = {
+        ...newSymbol,
+        standard_lot: newSymbol.standard_lot === '' ? 100000 : Number(newSymbol.standard_lot) || 100000,
+        digits: newSymbol.digits === '' ? 5 : Number(newSymbol.digits) || 5,
+        price2pips: newSymbol.price2pips === '' ? 100000 : Number(newSymbol.price2pips) || 100000,
+        default_sl_pips: newSymbol.default_sl_pips === '' ? 0 : Number(newSymbol.default_sl_pips) || 0,
+        profit_lock_start_pips: newSymbol.profit_lock_start_pips === '' ? 0 : Number(newSymbol.profit_lock_start_pips) || 0,
+        profit_lock_distance_pips: newSymbol.profit_lock_distance_pips === '' ? 0 : Number(newSymbol.profit_lock_distance_pips) || 0,
+        sl_trailing_start_pips: newSymbol.sl_trailing_start_pips === '' ? 0 : Number(newSymbol.sl_trailing_start_pips) || 0,
+        sl_trailing_distance_pips: newSymbol.sl_trailing_distance_pips === '' ? 0 : Number(newSymbol.sl_trailing_distance_pips) || 0,
+      };
+      
+      const symbolToAdd = cleanSymbolData(processedSymbol);
       const updatedSymbols = [...symbols, symbolToAdd];
       
       setSymbols(updatedSymbols);
@@ -228,6 +249,41 @@ export default function SymbolsPage() {
     setHasUnsavedChanges(hasChanges);
       
       console.log(`Updated ${field} for symbol ${symbolName}:`, value);
+  };
+
+  const handleSymbolFieldChange = (oldSymbol: string, field: string, value: any) => {
+    if (field === 'symbol') {
+      // If changing the symbol itself, check for duplicates
+      if (value !== oldSymbol && symbols.some(s => s.symbol === value && s.symbol !== oldSymbol)) {
+        setError(`Symbol "${value}" already exists`);
+        return;
+      }
+      
+      // Clear any previous errors
+      if (error) setError(null);
+      
+      // If changing the symbol itself, we need to handle it specially
+      const updatedSymbols = symbols.map(symbol => {
+        if (symbol.symbol === oldSymbol) {
+            return {
+              ...symbol,
+              symbol: value
+            };
+        }
+        return symbol;
+      });
+      
+      setSymbols(updatedSymbols);
+      
+      // Check if there are unsaved changes
+      const hasChanges = JSON.stringify(updatedSymbols) !== JSON.stringify(originalSymbols);
+      setHasUnsavedChanges(hasChanges);
+      
+      console.log(`Updated symbol from ${oldSymbol} to ${value}`);
+    } else {
+      // For other fields, use the regular handler
+      handleSymbolChange(oldSymbol, field, value);
+    }
   };
 
   const toggleSymbolExpansion = (symbolName: string) => {
@@ -478,6 +534,28 @@ export default function SymbolsPage() {
                   {/* Basic Info */}
                   <div className="space-y-3">
                     <h4 className="text-sm font-medium text-blue-400 border-b border-gray-700 pb-1">Basic Info</h4>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Symbol</label>
+                      <input
+                        type="text"
+                        value={symbol.symbol}
+                        onChange={(e) => handleSymbolFieldChange(symbol.symbol, 'symbol', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="e.g., XAUUSDm"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Name</label>
+                      <input
+                        type="text"
+                        value={symbol.name}
+                        onChange={(e) => handleSymbolFieldChange(symbol.symbol, 'name', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="e.g., Gold vs US Dollar"
+                      />
+                    </div>
                     
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1">Standard Lot</label>
@@ -754,10 +832,11 @@ export default function SymbolsPage() {
                         <label className="block text-sm font-medium text-gray-300 mb-1">Standard Lot</label>
                         <input
                           type="number"
-                          value={newSymbol.standard_lot || 100000}
-                          onChange={(e) => handleNewSymbolChange('standard_lot', Number(e.target.value) || 100000)}
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          min="1"
+                          value={newSymbol.standard_lot || ''}
+                          onChange={(e) => handleNewSymbolNumberChange('standard_lot', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          min="0"
+                          placeholder="100000"
                         />
                       </div>
                       
@@ -765,11 +844,12 @@ export default function SymbolsPage() {
                         <label className="block text-sm font-medium text-gray-300 mb-1">Digits</label>
                         <input
                           type="number"
-                          value={newSymbol.digits || 5}
-                          onChange={(e) => handleNewSymbolChange('digits', Number(e.target.value) || 5)}
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={newSymbol.digits || ''}
+                          onChange={(e) => handleNewSymbolNumberChange('digits', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           min="0"
                           max="10"
+                          placeholder="5"
                         />
                       </div>
                       
@@ -777,10 +857,11 @@ export default function SymbolsPage() {
                         <label className="block text-sm font-medium text-gray-300 mb-1">Price to Pips</label>
                         <input
                           type="number"
-                          value={newSymbol.price2pips || 100000}
-                          onChange={(e) => handleNewSymbolChange('price2pips', Number(e.target.value) || 100000)}
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          min="1"
+                          value={newSymbol.price2pips || ''}
+                          onChange={(e) => handleNewSymbolNumberChange('price2pips', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          min="0"
+                          placeholder="100000"
                         />
                       </div>
                       
@@ -788,10 +869,11 @@ export default function SymbolsPage() {
                         <label className="block text-sm font-medium text-gray-300 mb-1">Default SL Pips</label>
                         <input
                           type="number"
-                          value={newSymbol.default_sl_pips || 0}
-                          onChange={(e) => handleNewSymbolChange('default_sl_pips', Number(e.target.value) || 0)}
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={newSymbol.default_sl_pips || ''}
+                          onChange={(e) => handleNewSymbolNumberChange('default_sl_pips', e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           min="0"
+                          placeholder="0"
                         />
                       </div>
                     </div>
@@ -819,20 +901,22 @@ export default function SymbolsPage() {
                               <label className="block text-xs text-gray-400 mb-1">Start Pips</label>
                               <input
                                 type="number"
-                                value={newSymbol.profit_lock_start_pips || 0}
-                                onChange={(e) => handleNewSymbolChange('profit_lock_start_pips', Number(e.target.value) || 0)}
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                value={newSymbol.profit_lock_start_pips || ''}
+                                onChange={(e) => handleNewSymbolNumberChange('profit_lock_start_pips', e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                 min="0"
+                                placeholder="0"
                               />
                             </div>
                             <div>
                               <label className="block text-xs text-gray-400 mb-1">Distance Pips</label>
                               <input
                                 type="number"
-                                value={newSymbol.profit_lock_distance_pips || 0}
-                                onChange={(e) => handleNewSymbolChange('profit_lock_distance_pips', Number(e.target.value) || 0)}
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                value={newSymbol.profit_lock_distance_pips || ''}
+                                onChange={(e) => handleNewSymbolNumberChange('profit_lock_distance_pips', e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                 min="0"
+                                placeholder="0"
                               />
                             </div>
                           </div>
@@ -856,20 +940,22 @@ export default function SymbolsPage() {
                               <label className="block text-xs text-gray-400 mb-1">Start Pips</label>
                               <input
                                 type="number"
-                                value={newSymbol.sl_trailing_start_pips || 0}
-                                onChange={(e) => handleNewSymbolChange('sl_trailing_start_pips', Number(e.target.value) || 0)}
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                value={newSymbol.sl_trailing_start_pips || ''}
+                                onChange={(e) => handleNewSymbolNumberChange('sl_trailing_start_pips', e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                 min="0"
+                                placeholder="0"
                               />
                             </div>
                             <div>
                               <label className="block text-xs text-gray-400 mb-1">Distance Pips</label>
                               <input
                                 type="number"
-                                value={newSymbol.sl_trailing_distance_pips || 0}
-                                onChange={(e) => handleNewSymbolChange('sl_trailing_distance_pips', Number(e.target.value) || 0)}
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                                value={newSymbol.sl_trailing_distance_pips || ''}
+                                onChange={(e) => handleNewSymbolNumberChange('sl_trailing_distance_pips', e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                 min="0"
+                                placeholder="0"
                               />
                             </div>
                           </div>

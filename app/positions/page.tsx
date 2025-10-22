@@ -60,6 +60,7 @@ export default function PositionsPage() {
   const [saving, setSaving] = useState<{ [ticket: number]: boolean }>({});
   const [expandedPositions, setExpandedPositions] = useState<Set<number>>(new Set());
   const [closing, setClosing] = useState(false);
+  const [closingPosition, setClosingPosition] = useState<{ [ticket: number]: boolean }>({});
   const [closeMessage, setCloseMessage] = useState<string | null>(null);
   const [editingValues, setEditingValues] = useState<{ [key: string]: string }>({});
   const [applyingDefaults, setApplyingDefaults] = useState<{ [ticket: number]: boolean }>({});
@@ -473,6 +474,27 @@ export default function PositionsPage() {
     } catch (err: any) {
       console.error("Error closing position:", err);
       throw err;
+    }
+  };
+
+  const closeSinglePosition = async (ticket: number) => {
+    const position = positions.find(pos => pos.ticket === ticket);
+    if (!position) return;
+
+    setClosingPosition(prev => ({ ...prev, [ticket]: true }));
+    try {
+      await closePosition(position);
+      setCloseMessage(`Position #${ticket} closed successfully`);
+      setTimeout(() => setCloseMessage(null), 5000);
+      
+      // Refresh positions to remove the closed position
+      await fetchPositions();
+    } catch (err: any) {
+      console.error("Error closing position:", err);
+      setCloseMessage(`Error closing position #${ticket}: ${err.message}`);
+      setTimeout(() => setCloseMessage(null), 5000);
+    } finally {
+      setClosingPosition(prev => ({ ...prev, [ticket]: false }));
     }
   };
 
@@ -1034,8 +1056,18 @@ export default function PositionsPage() {
 
         {/* Trading Section */}
         {showTradingSection && (
-          <div className="mb-6 bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-4">
-            <h3 className="text-lg font-semibold text-white mb-4">Place New Trade</h3>
+          <div className="mb-6 bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-blue-600 rounded-lg">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Place New Trade</h3>
+                <p className="text-sm text-gray-400">Trade with symbols configured in symbol settings</p>
+              </div>
+            </div>
             
             {/* Close Message */}
             {closeMessage && (
@@ -1064,26 +1096,43 @@ export default function PositionsPage() {
                         <div>
                           <h4 className="text-sm font-medium text-white">{symbolKey}</h4>
                           <span className="text-xs text-gray-400">
-                            Default: {symbol.default_lot_size || 0.01} lots
+                            {symbol.name || 'Trading Symbol'}
                           </span>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Standard Lot: {symbol.standard_lot || 100000}
+                          </div>
                         </div>
                       </div>
                       
                       {/* Controls Row */}
                       <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
                         {/* Volume Input */}
-                        <div className="flex items-center space-x-2">
-                          <label className="text-xs text-gray-400 whitespace-nowrap">Volume:</label>
-                          <input
-                            type="number"
-                            value={order.volume}
-                            onChange={(e) => handleTradingVolumeChange(symbolKey, e.target.value)}
-                            className="w-20 px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
-                            min="0.01"
-                            step="0.01"
-                            placeholder={symbol.default_lot_size?.toString() || "0.01"}
-                          />
-                          <span className="text-xs text-gray-400">lots</span>
+                        <div className="flex flex-col space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <label className="text-xs text-gray-400 whitespace-nowrap">Volume:</label>
+                            <input
+                              type="number"
+                              value={order.volume}
+                              onChange={(e) => handleTradingVolumeChange(symbolKey, e.target.value)}
+                              className="w-20 px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                              min="0.01"
+                              step="0.01"
+                              placeholder="0.01"
+                            />
+                            <span className="text-xs text-gray-400">lots</span>
+                          </div>
+                          {/* Quick Volume Buttons */}
+                          <div className="flex space-x-1">
+                            {[0.01, 0.1, 0.5, 1.0].map((size) => (
+                              <button
+                                key={size}
+                                onClick={() => handleTradingVolumeChange(symbolKey, size.toString())}
+                                className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-gray-300 rounded transition-colors"
+                              >
+                                {size}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                         
                         {/* Buy/Sell Buttons */}
@@ -1366,6 +1415,28 @@ export default function PositionsPage() {
                           {/* Actions */}
                           <td className="px-6 py-4">
                             <div className="flex items-center space-x-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent row expansion
+                                  closeSinglePosition(position.ticket);
+                                }}
+                                disabled={closingPosition[position.ticket]}
+                                className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs flex items-center space-x-1"
+                              >
+                                {closingPosition[position.ticket] ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+                                    <span>Closing...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    <span>Close</span>
+                                  </>
+                                )}
+                              </button>
                               <span className="text-xs text-gray-500">
                                 {isExpanded ? 'Click to hide' : 'Click to expand'}
                               </span>

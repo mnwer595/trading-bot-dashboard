@@ -151,7 +151,7 @@ export default function Home() {
         )}
 
         {/* Main Navigation Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           {/* General Settings Card */}
           <Link href="/settings" className="group">
             <div className="bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-700 hover:border-gray-600">
@@ -225,6 +225,21 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-semibold text-white mb-2">Closed Positions</h3>
               <p className="text-gray-400">View trading history with advanced filtering and analysis</p>
+            </div>
+          </Link>
+
+          {/* AI Trading Card */}
+          <Link href="/ai-trading" className="group">
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-700 hover:border-gray-600">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="p-2 bg-cyan-600 rounded-lg">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">AI Trading</h3>
+              <p className="text-gray-400">Manage AI trading models and monitor automated trading</p>
             </div>
           </Link>
 
