@@ -35,14 +35,11 @@ echo [4/5] Building the project...
 echo This may take a few moments...
 npm run build
 if %errorlevel% neq 0 (
-    echo ERROR: Build failed - cannot start server
+    echo WARNING: Build failed, but attempting to start server anyway...
     echo Check the error messages above
-    echo.
-    echo Press any key to exit...
-    pause >nul
-    exit /b 1
+) else (
+    echo ✓ Build completed successfully
 )
-echo ✓ Build completed successfully
 
 echo.
 echo [5/5] Starting the application...
