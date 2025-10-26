@@ -71,6 +71,9 @@ export default function PositionsPage() {
   const [placingTrade, setPlacingTrade] = useState<{ [symbol: string]: boolean }>({});
   const [accountSettings, setAccountSettings] = useState<any>(null);
   const [updatingTradeMonitoring, setUpdatingTradeMonitoring] = useState(false);
+  const [showProfitSettings, setShowProfitSettings] = useState<{ [ticket: number]: boolean }>({});
+  const [showPositionModal, setShowPositionModal] = useState<{ [ticket: number]: boolean }>({});
+  const [hasChanges, setHasChanges] = useState<{ [ticket: number]: boolean }>({});
 
   const getInputValue = (ticket: number, field: string, defaultValue: number): string => {
     const key = `${ticket}-${field}`;
@@ -85,22 +88,64 @@ export default function PositionsPage() {
     }));
   };
 
-  const handleInputBlur = (ticket: number, field: string, value: string) => {
-    const numValue = Number(value);
-    if (!isNaN(numValue) && numValue >= 0) {
-      if (field.includes('profit_lock')) {
-        handleProfitLockChange(ticket, field as any, numValue);
-      } else if (field.includes('sl_trailing')) {
-        handleSLTrailingChange(ticket, field as any, numValue);
-      }
+  const handleSaveChanges = async (ticket: number) => {
+    const position = positions.find(p => p.ticket === ticket);
+    if (!position) return;
+
+    try {
+      setSaving(prev => ({ ...prev, [ticket]: true }));
+      
+      // Get the current editing values
+      const editingData = Object.keys(editingValues)
+        .filter(key => key.startsWith(`${ticket}-`))
+        .reduce((acc, key) => {
+          const field = key.split('-').slice(1).join('-');
+          acc[field] = editingValues[key];
+          return acc;
+        }, {} as any);
+
+      // Update position with editing values and toggle states
+      const updates: any = {
+        ticket: ticket,
+        profit_lock_enabled: position.profit_lock_enabled,
+        profit_lock_start_pips: editingData['profit_lock_start_pips'] !== undefined 
+          ? Number(editingData['profit_lock_start_pips']) 
+          : position.profit_lock_start_pips,
+        profit_lock_distance_pips: editingData['profit_lock_distance_pips'] !== undefined 
+          ? Number(editingData['profit_lock_distance_pips']) 
+          : position.profit_lock_distance_pips,
+        sl_trailing_enabled: position.sl_trailing_enabled,
+        sl_trailing_start_pips: editingData['sl_trailing_start_pips'] !== undefined 
+          ? Number(editingData['sl_trailing_start_pips']) 
+          : position.sl_trailing_start_pips,
+        sl_trailing_distance_pips: editingData['sl_trailing_distance_pips'] !== undefined 
+          ? Number(editingData['sl_trailing_distance_pips']) 
+          : position.sl_trailing_distance_pips,
+        profit_secure_enabled: position.profit_secure_enabled
+      };
+
+      await savePositionOptions(updates as any);
+      
+      // Clear editing values for this ticket
+      setEditingValues(prev => {
+        const newValues = { ...prev };
+        Object.keys(newValues).forEach(key => {
+          if (key.startsWith(`${ticket}-`)) {
+            delete newValues[key];
+          }
+        });
+        return newValues;
+      });
+      
+      // Refresh positions to show updated data
+      await fetchPositions();
+      
+    } catch (err: any) {
+      console.error(`Error saving changes for ticket ${ticket}:`, err);
+      setError(`Failed to save changes: ${err.message}`);
+    } finally {
+      setSaving(prev => ({ ...prev, [ticket]: false }));
     }
-    // Clear the editing value
-    const key = `${ticket}-${field}`;
-    setEditingValues(prev => {
-      const newValues = { ...prev };
-      delete newValues[key];
-      return newValues;
-    });
   };
 
   const applyDefaultSettings = async (ticket: number) => {
@@ -263,7 +308,7 @@ export default function PositionsPage() {
     }
   };
 
-  const fetchPositions = async () => {
+  const fetchPositions = async (preserveSettings = false) => {
     try {
       const url = new URL(GET_POSITIONS_URL);
       url.searchParams.append('account_id', selectedAccount);
@@ -377,7 +422,26 @@ export default function PositionsPage() {
         });
       });
       
-      setPositions(processedPositions);
+      // If preserving settings, merge with existing positions
+      if (preserveSettings) {
+        setPositions(prev => prev.map(oldPos => {
+          const newPos = processedPositions.find((p: any) => p.ticket === oldPos.ticket);
+          if (newPos) {
+            // Update only price-related fields, preserve settings
+            return {
+              ...oldPos,
+              price_current: newPos.price_current,
+              profit: newPos.profit,
+              sl: newPos.sl,
+              tp: newPos.tp,
+              swap: newPos.swap
+            };
+          }
+          return oldPos;
+        }));
+      } else {
+        setPositions(processedPositions);
+      }
       setError(null);
       setLastUpdate(new Date());
     } catch (err: any) {
@@ -571,12 +635,18 @@ export default function PositionsPage() {
     fetchPositions();
     fetchSymbolSettings();
 
+    // Check if any modal is open
+    const isAnyModalOpen = Object.values(showPositionModal).some(Boolean);
+    
     // Set up auto-refresh every 3 seconds
-    const interval = setInterval(fetchPositions, 3000);
-
+    const interval = setInterval(() => {
+      // If modal is open, preserve settings when fetching
+      fetchPositions(isAnyModalOpen);
+    }, 3000);
+    
     // Cleanup interval on component unmount
     return () => clearInterval(interval);
-  }, [selectedAccount]);
+  }, [selectedAccount, showPositionModal]);
 
   // Separate effect for account settings to avoid calling when selectedAccount is not set
   useEffect(() => {
@@ -974,703 +1044,615 @@ export default function PositionsPage() {
   const uniqueSymbols = [...new Set(positions.map(pos => pos.symbol))];
 
   return (
-    <div className="min-h-screen bg-gray-900 p-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
-            <div>
-              <h1 className="text-3xl font-bold text-white">Open Positions</h1>
-              <p className="text-gray-400 mt-1">
-                Real-time monitoring of active trading positions
-              </p>
+    <div className="min-h-screen bg-gray-900">
+      {/* Account Summary Cards - Horizontal Scroll */}
+      <div className="px-4 py-3 bg-gray-800 border-b border-gray-700">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-3">
+            <Link 
+              href="/"
+              className="p-2 text-white hover:bg-gray-700 rounded-lg transition-colors"
+              aria-label="Back to Home"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </Link>
+            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+              <span className="text-white font-bold text-sm">TB</span>
             </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 w-full lg:w-auto">
-              <AccountSelector 
-                selectedAccount={selectedAccount}
-                onAccountChange={handleAccountChange}
-                className="w-full sm:w-auto"
-              />
-              {accountSettings && (
-                <div className="flex items-center space-x-2 bg-gray-800 px-3 py-2 rounded-lg border border-gray-600">
-                  <span className="text-sm text-gray-300 whitespace-nowrap">Trade Monitoring:</span>
-                  <button
-                    onClick={() => handleTradeMonitoringToggle(!accountSettings.trade_monitoring_enabled)}
-                    disabled={updatingTradeMonitoring}
-                    className={`w-12 h-6 rounded-full flex items-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      accountSettings.trade_monitoring_enabled ? "bg-green-600" : "bg-gray-600"
-                    } ${updatingTradeMonitoring ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    <span
-                      className={`inline-block w-4 h-4 rounded-full bg-white shadow transform transition-transform ${
-                        accountSettings.trade_monitoring_enabled ? "translate-x-7" : "translate-x-1"
-                      }`}
-                    />
-                  </button>
-                  {updatingTradeMonitoring && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b border-blue-600"></div>
-                  )}
-                </div>
-              )}
-              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-                <button
-                  onClick={() => setShowTradingSection(!showTradingSection)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-full sm:w-auto"
-                >
-                  {showTradingSection ? 'Hide Trading' : 'New Trade'}
-                </button>
-                <Link
-                  href="/"
-                  className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors text-center w-full sm:w-auto"
-                >
-                  Back to Dashboard
-                </Link>
+            <span className="text-white font-semibold text-lg">Positions</span>
+          </div>
+          <button
+            onClick={() => setShowTradingSection(!showTradingSection)}
+            className="p-2 text-white hover:bg-gray-700 rounded-lg transition-colors"
+            aria-label="Add Trade"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        </div>
+        
+        {/* Total P/L Display */}
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-gray-400 text-sm">Total P/L:</span>
+          <span className={`text-2xl font-bold ${getProfitColor(positions.reduce((sum, pos) => sum + pos.profit, 0))}`}>
+            {formatCurrency(positions.reduce((sum, pos) => sum + pos.profit, 0))}
+          </span>
+        </div>
+        
+        <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex-shrink-0 w-32">
+            <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
+              <div className="text-xs text-gray-400 mb-1">Balance</div>
+              <div className="text-base font-semibold text-white">
+                {accountSettings?.balance || '0.00'}
               </div>
             </div>
           </div>
-          
-          {/* Status Bar */}
-          <div className="mt-4 flex items-center justify-between bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${loading ? 'bg-yellow-400' : 'bg-green-400'}`}></div>
-                <span className="text-sm text-gray-300">
-                  {loading ? 'Loading...' : 'Connected'}
-                </span>
+          <div className="flex-shrink-0 w-32">
+            <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
+              <div className="text-xs text-gray-400 mb-1">Equity</div>
+              <div className="text-base font-semibold text-white">
+                {accountSettings?.equity || '0.00'}
               </div>
-              {lastUpdate && (
-                <span className="text-sm text-gray-500">
-                  Last update: {lastUpdate.toLocaleTimeString()}
-                </span>
-              )}
             </div>
-            <button
-              onClick={fetchPositions}
-              disabled={loading}
-              className="px-3 py-1 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 disabled:opacity-50 text-sm transition-colors"
-            >
-              Refresh
-            </button>
+          </div>
+          <div className="flex-shrink-0 w-32">
+            <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
+              <div className="text-xs text-gray-400 mb-1">Margin</div>
+              <div className="text-base font-semibold text-white">
+                {accountSettings?.margin || '0.00'}
+              </div>
+            </div>
+          </div>
+          <div className="flex-shrink-0 w-32">
+            <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
+              <div className="text-xs text-gray-400 mb-1">Free Margin</div>
+              <div className="text-base font-semibold text-white">
+                {accountSettings?.free_margin || '0.00'}
+              </div>
+            </div>
+          </div>
+          <div className="flex-shrink-0 w-32">
+            <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
+              <div className="text-xs text-gray-400 mb-1">Margin Level</div>
+              <div className="text-base font-semibold text-white">
+                {accountSettings?.margin_level || '0.00'}%
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Trading Section */}
-        {showTradingSection && (
-          <div className="mb-6 bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="p-2 bg-blue-600 rounded-lg">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        
+        {/* Account Selector and Trade Monitoring Toggle */}
+        <div className="mt-3 space-y-3">
+          <AccountSelector 
+            selectedAccount={selectedAccount}
+            onAccountChange={handleAccountChange}
+            className="w-full"
+          />
+          
+          {/* Trade Monitoring Toggle */}
+          <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
+                <span className="text-sm font-medium text-gray-300">Trade Monitoring</span>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">Place New Trade</h3>
-                <p className="text-sm text-gray-400">Trade with symbols configured in symbol settings</p>
-              </div>
+              <button
+                className={`w-12 h-6 rounded-full flex items-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  accountSettings?.trade_monitoring_enabled ? "bg-blue-600" : "bg-gray-600"
+                } ${updatingTradeMonitoring ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={() => !updatingTradeMonitoring && handleTradeMonitoringToggle(!accountSettings?.trade_monitoring_enabled)}
+                disabled={updatingTradeMonitoring}
+                aria-label="Toggle Trade Monitoring"
+                tabIndex={0}
+              >
+                <span
+                  className={`inline-block w-5 h-5 rounded-full bg-white shadow transform transition-transform ${
+                    accountSettings?.trade_monitoring_enabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
             </div>
-            
-            {/* Close Message */}
-            {closeMessage && (
-              <div className={`mb-4 p-3 rounded-lg ${
-                closeMessage.includes('Error') 
-                  ? 'bg-red-900/50 border border-red-700 text-red-300' 
-                  : 'bg-green-900/50 border border-green-700 text-green-300'
-              }`}>
-                {closeMessage}
-              </div>
-            )}
+          </div>
+        </div>
+      </div>
 
-            <div className="space-y-3">
-              {symbolSettings.map((symbol) => {
-                const symbolKey = symbol.symbol;
-                initializeTradingOrder(symbolKey);
-                const order = tradingOrders[symbolKey];
-                
-                if (!order) return null;
+      {/* Positions Section Header */}
+      <div className="px-4 py-2 border-t border-gray-700 bg-gray-800">
+        <h2 className="text-gray-400 text-sm font-medium">Positions ({positions.length})</h2>
+      </div>
 
-                return (
-                  <div key={symbolKey} className="bg-gray-700 rounded-lg p-4">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-3 lg:space-y-0">
-                      {/* Symbol Info */}
-                      <div className="flex items-center space-x-4">
-                        <div>
-                          <h4 className="text-sm font-medium text-white">{symbolKey}</h4>
-                          <span className="text-xs text-gray-400">
-                            {symbol.name || 'Trading Symbol'}
+      {/* Trading Panel - Collapsible */}
+      {showTradingSection && (
+        <div className="mx-4 mt-3 bg-blue-900/30 rounded-lg border border-blue-700/50 p-4">
+          <div className="flex items-center space-x-2 mb-3">
+            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            <h3 className="text-blue-300 font-semibold">New Trade</h3>
+          </div>
+          <div className="space-y-2">
+            {symbolSettings.map((symbol) => {
+              const symbolKey = symbol.symbol;
+              initializeTradingOrder(symbolKey);
+              const order = tradingOrders[symbolKey];
+              if (!order) return null;
+
+              return (
+                <div key={symbolKey} className="bg-gray-800 rounded-lg p-3 border border-blue-700/50">
+                  <div className="text-sm font-medium text-white mb-2">{symbolKey}</div>
+                  <input
+                    type="number"
+                    value={order.volume}
+                    onChange={(e) => handleTradingVolumeChange(symbolKey, e.target.value)}
+                    className="w-full px-3 py-2 mb-2 bg-gray-700 border border-gray-600 rounded-md text-sm text-white placeholder-gray-400"
+                    placeholder="0.01"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => placeTrade(symbolKey, 'buy')}
+                      disabled={placingTrade[symbolKey]}
+                      className="px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium disabled:opacity-50"
+                    >
+                      BUY
+                    </button>
+                    <button
+                      onClick={() => placeTrade(symbolKey, 'sell')}
+                      disabled={placingTrade[symbolKey]}
+                      className="px-4 py-2 bg-red-500 text-white rounded-md text-sm font-medium disabled:opacity-50"
+                    >
+                      SELL
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Position Cards - Mobile Optimized */}
+      <div className="px-4 py-3 bg-gray-900 min-h-screen">
+        {loading && positions.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-3 text-gray-400">Loading positions...</p>
+          </div>
+        ) : positions.length === 0 ? (
+          <div className="text-center py-12">
+            <svg className="mx-auto h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <h3 className="mt-3 text-gray-400 font-medium">No open positions</h3>
+            <p className="mt-1 text-gray-500 text-sm">Get started by placing a trade</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {positions.map((position) => {
+              const isExpanded = expandedPositions.has(position.ticket);
+              const pips = calculatePips(position);
+              
+              return (
+                <div
+                  key={position.ticket}
+                  className={`bg-gray-800 rounded-lg shadow-sm border ${
+                    isExpanded ? 'border-blue-500 border-l-4' : 'border-gray-700'
+                  }`}
+                >
+                  {/* Main Position Card */}
+                  <div
+                    className="p-3 active:bg-gray-700 transition-colors"
+                    onClick={() => togglePositionExpansion(position.ticket)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        {/* Symbol and Type */}
+                        <div className="flex items-center space-x-2 mb-1">
+                          <span className="text-base font-semibold text-white">
+                            {position.symbol}
                           </span>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Standard Lot: {symbol.standard_lot || 100000}
-                          </div>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            position.type === 'buy' 
+                              ? 'bg-green-900/50 text-green-400' 
+                              : 'bg-red-900/50 text-red-400'
+                          }`}>
+                            {position.type === 'buy' ? 'buy' : 'sell'} {position.volume}
+                          </span>
+                        </div>
+                        
+                        {/* Prices */}
+                        <div className="text-sm text-gray-400">
+                          {position.price_open.toFixed(5)} → {position.price_current.toFixed(5)}
+                        </div>
+                        
+                        {/* Profit and Pips */}
+                        <div className="flex items-center space-x-3 mt-1">
+                          <span className={`text-base font-semibold ${getProfitColor(position.profit)}`}>
+                            {position.profit.toFixed(2)}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            {pips} pips
+                          </span>
                         </div>
                       </div>
                       
-                      {/* Controls Row */}
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-                        {/* Volume Input */}
-                        <div className="flex flex-col space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <label className="text-xs text-gray-400 whitespace-nowrap">Volume:</label>
-                            <input
-                              type="number"
-                              value={order.volume}
-                              onChange={(e) => handleTradingVolumeChange(symbolKey, e.target.value)}
-                              className="w-20 px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
-                              min="0.01"
-                              step="0.01"
-                              placeholder="0.01"
-                            />
-                            <span className="text-xs text-gray-400">lots</span>
+                      {/* Right side: Comment and Expand Indicator */}
+                      <div className="flex flex-col items-end space-y-2">
+                        {position.comment && (
+                          <div className="text-xs text-gray-300 text-right">
+                            {position.comment}
                           </div>
-                          {/* Quick Volume Buttons */}
-                          <div className="flex space-x-1">
-                            {[0.01, 0.1, 0.5, 1.0].map((size) => (
-                              <button
-                                key={size}
-                                onClick={() => handleTradingVolumeChange(symbolKey, size.toString())}
-                                className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-gray-300 rounded transition-colors"
-                              >
-                                {size}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        
-                        {/* Buy/Sell Buttons */}
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => {
-                              // Update order type and place trade with explicit order type
-                              handleTradingOrderTypeChange(symbolKey, 'buy');
-                              placeTrade(symbolKey, 'buy');
-                            }}
-                            disabled={placingTrade[symbolKey] || !order.volume || parseFloat(order.volume) <= 0}
-                            className="px-6 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
-                          >
-                            {placingTrade[symbolKey] ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
-                                <span>Placing...</span>
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                                </svg>
-                                <span>BUY</span>
-                              </>
-                            )}
-                          </button>
-                          <button
-                            onClick={() => {
-                              // Update order type and place trade with explicit order type
-                              handleTradingOrderTypeChange(symbolKey, 'sell');
-                              placeTrade(symbolKey, 'sell');
-                            }}
-                            disabled={placingTrade[symbolKey] || !order.volume || parseFloat(order.volume) <= 0}
-                            className="px-6 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
-                          >
-                            {placingTrade[symbolKey] ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
-                                <span>Placing...</span>
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                                </svg>
-                                <span>SELL</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
+                        )}
+                        {/* Expand Indicator */}
+                        <svg
+                          className={`w-5 h-5 text-gray-500 transform transition-transform ${
+                            isExpanded ? 'rotate-180' : ''
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-            
-            {symbolSettings.length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-gray-400">No symbols available. Please check symbol settings.</p>
-              </div>
-            )}
+
+                  {/* Expanded Details */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-700 bg-gray-800/50">
+                      <div className="p-3 space-y-3">
+                        {/* Date and SL/TP */}
+                        <div className="text-sm text-gray-400">
+                          {position.open_time ? formatDateTime(position.open_time) : 'N/A'}
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="text-gray-500">S/L: </span>
+                            <span className="font-medium text-gray-300">{position.sl.toFixed(5)}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">T/P: </span>
+                            <span className="font-medium text-gray-300">{position.tp.toFixed(5)}</span>
+                          </div>
+                        </div>
+                        
+                        {position.swap !== undefined && (
+                          <div className="text-sm">
+                            <span className="text-gray-500">Swap: </span>
+                            <span className="font-medium text-gray-300">{position.swap.toFixed(2)}</span>
+                          </div>
+                        )}
+
+                        {/* Additional Info */}
+                        {position.magic && (
+                          <div className="text-sm">
+                            <span className="text-gray-500">Magic: </span>
+                            <span className="font-medium text-gray-300">{position.magic}</span>
+                          </div>
+                        )}
+
+                        {/* Settings Icon */}
+                        <div className="pt-2 border-t border-gray-700">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowPositionModal(prev => ({ ...prev, [position.ticket]: true }));
+                            }}
+                            className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium text-sm flex items-center justify-center space-x-2 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span>Settings</span>
+                          </button>
+                        </div>
+
+                        {/* Close Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            closeSinglePosition(position.ticket);
+                          }}
+                          disabled={closingPosition[position.ticket]}
+                          className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm disabled:opacity-50 flex items-center justify-center space-x-2 transition-colors"
+                        >
+                          {closingPosition[position.ticket] ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              <span>Closing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              <span>Close Position</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* Close Position Buttons */}
-        {positions.length > 0 && (
-          <div className="mb-6 bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-4">
-            <h3 className="text-lg font-semibold text-white mb-4">Close Positions</h3>
-            
-            {/* Close Message */}
-            {closeMessage && (
-              <div className={`mb-4 p-3 rounded-lg ${
-                closeMessage.includes('Error') 
-                  ? 'bg-red-900/50 border border-red-700 text-red-300' 
-                  : 'bg-green-900/50 border border-green-700 text-green-300'
-              }`}>
-                {closeMessage}
-              </div>
-            )}
+        {/* Bottom Padding for better scrolling */}
+        <div className="pb-20"></div>
+      </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {/* Close All Positions */}
-              <button
-                onClick={closeAllPositions}
-                disabled={closing || positions.length === 0}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
-              >
-                {closing ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                )}
-                <span>Close All ({positions.length})</span>
-              </button>
+      {/* Position Detail Modal */}
+      {positions.map((position) => {
+        if (!showPositionModal[position.ticket]) return null;
+        
+        return (
+          <div
+            key={`modal-${position.ticket}`}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowPositionModal(prev => ({ ...prev, [position.ticket]: false }))}
+          >
+            <div
+              className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-gray-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-white">Position #{position.ticket}</h2>
+                  <button
+                    onClick={() => setShowPositionModal(prev => ({ ...prev, [position.ticket]: false }))}
+                    className="p-2 text-gray-400 hover:text-white"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
 
-              {/* Close All Buy */}
-              <button
-                onClick={() => closeTypePositions("buy")}
-                disabled={closing || positions.filter(pos => pos.type === "buy").length === 0}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
-              >
-                {closing ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                )}
-                <span>Close All Buy ({positions.filter(pos => pos.type === "buy").length})</span>
-              </button>
+                {/* Position Info */}
+                <div className="space-y-4 mb-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-400">Symbol</p>
+                      <p className="text-white font-medium">{position.symbol}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Type</p>
+                      <p className={`font-medium ${position.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                        {position.type.toUpperCase()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Volume</p>
+                      <p className="text-white font-medium">{position.volume}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Profit</p>
+                      <p className={`font-medium ${getProfitColor(position.profit)}`}>
+                        {formatCurrency(position.profit)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Open Price</p>
+                      <p className="text-white font-medium">{position.price_open.toFixed(5)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Current Price</p>
+                      <p className="text-white font-medium">{position.price_current.toFixed(5)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">S/L</p>
+                      <p className="text-white font-medium">{position.sl.toFixed(5)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">T/P</p>
+                      <p className="text-white font-medium">{position.tp.toFixed(5)}</p>
+                    </div>
+                    {position.swap !== undefined && (
+                      <div>
+                        <p className="text-sm text-gray-400">Swap</p>
+                        <p className="text-white font-medium">{position.swap.toFixed(2)}</p>
+                      </div>
+                    )}
+                    {position.magic && (
+                      <div>
+                        <p className="text-sm text-gray-400">Magic Number</p>
+                        <p className="text-white font-medium">{position.magic}</p>
+                      </div>
+                    )}
+                    {position.comment && (
+                      <div className="col-span-2">
+                        <p className="text-sm text-gray-400">Comment</p>
+                        <p className="text-white font-medium">{position.comment}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-              {/* Close All Sell */}
-              <button
-                onClick={() => closeTypePositions("sell")}
-                disabled={closing || positions.filter(pos => pos.type === "sell").length === 0}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
-              >
-                {closing ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                  </svg>
-                )}
-                <span>Close All Sell ({positions.filter(pos => pos.type === "sell").length})</span>
-              </button>
-            </div>
-
-            {/* Symbol-specific close buttons */}
-            {uniqueSymbols.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-600">
-                <h4 className="text-sm font-medium text-gray-400 mb-2">Close by Symbol:</h4>
-                <div className="flex flex-wrap gap-2">
-                  {uniqueSymbols.map(symbol => (
+                {/* Profit Lock Settings */}
+                <div className="border-t border-gray-700 pt-4 mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">Profit Lock</h3>
                     <button
-                      key={symbol}
-                      onClick={() => closeSymbolPositions(symbol)}
-                      disabled={closing || positions.filter(pos => pos.symbol === symbol).length === 0}
-                      className="px-3 py-1 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                      onClick={() => {
+                        // Update local state only
+                        setPositions(prev => prev.map(pos => 
+                          pos.ticket === position.ticket 
+                            ? { ...pos, profit_lock_enabled: !pos.profit_lock_enabled }
+                            : pos
+                        ));
+                        setHasChanges(prev => ({ ...prev, [position.ticket]: true }));
+                      }}
+                      className={`w-12 h-7 rounded-full relative transition-colors ${
+                        position.profit_lock_enabled ? 'bg-blue-600' : 'bg-gray-600'
+                      }`}
                     >
-                      {symbol} ({positions.filter(pos => pos.symbol === symbol).length})
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transform transition-transform ${
+                          position.profit_lock_enabled ? 'translate-x-5' : ''
+                        }`}
+                      />
                     </button>
-                  ))}
+                  </div>
+                  {position.profit_lock_enabled && (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Start Pips</label>
+                        <input
+                          type="number"
+                          value={getInputValue(position.ticket, 'profit_lock_start_pips', position.profit_lock_start_pips)}
+                          onChange={(e) => {
+                            handleInputChange(position.ticket, 'profit_lock_start_pips', e.target.value);
+                            setHasChanges(prev => ({ ...prev, [position.ticket]: true }));
+                          }}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Distance Pips</label>
+                        <input
+                          type="number"
+                          value={getInputValue(position.ticket, 'profit_lock_distance_pips', position.profit_lock_distance_pips)}
+                          onChange={(e) => {
+                            handleInputChange(position.ticket, 'profit_lock_distance_pips', e.target.value);
+                            setHasChanges(prev => ({ ...prev, [position.ticket]: true }));
+                          }}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* SL Trailing Settings */}
+                <div className="border-t border-gray-700 pt-4 mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">SL Trailing</h3>
+                    <button
+                      onClick={() => {
+                        // Update local state only
+                        setPositions(prev => prev.map(pos => 
+                          pos.ticket === position.ticket 
+                            ? { ...pos, sl_trailing_enabled: !pos.sl_trailing_enabled }
+                            : pos
+                        ));
+                        setHasChanges(prev => ({ ...prev, [position.ticket]: true }));
+                      }}
+                      className={`w-12 h-7 rounded-full relative transition-colors ${
+                        position.sl_trailing_enabled ? 'bg-blue-600' : 'bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transform transition-transform ${
+                          position.sl_trailing_enabled ? 'translate-x-5' : ''
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  {position.sl_trailing_enabled && (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Start Pips</label>
+                        <input
+                          type="number"
+                          value={getInputValue(position.ticket, 'sl_trailing_start_pips', position.sl_trailing_start_pips)}
+                          onChange={(e) => {
+                            handleInputChange(position.ticket, 'sl_trailing_start_pips', e.target.value);
+                            setHasChanges(prev => ({ ...prev, [position.ticket]: true }));
+                          }}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Distance Pips</label>
+                        <input
+                          type="number"
+                          value={getInputValue(position.ticket, 'sl_trailing_distance_pips', position.sl_trailing_distance_pips)}
+                          onChange={(e) => {
+                            handleInputChange(position.ticket, 'sl_trailing_distance_pips', e.target.value);
+                            setHasChanges(prev => ({ ...prev, [position.ticket]: true }));
+                          }}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Restore Default Settings Button */}
+                <div className="border-t border-gray-700 pt-4 mb-4">
+                  <button
+                    onClick={async () => {
+                      await applyDefaultSettings(position.ticket);
+                      setHasChanges(prev => ({ ...prev, [position.ticket]: true }));
+                    }}
+                    disabled={applyingDefaults[position.ticket]}
+                    className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+                  >
+                    {applyingDefaults[position.ticket] ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Applying...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Restore Default Settings</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex space-x-3">
+                  <button
+                    onClick={async () => {
+                      await handleSaveChanges(position.ticket);
+                      setShowPositionModal(prev => ({ ...prev, [position.ticket]: false }));
+                      setHasChanges(prev => ({ ...prev, [position.ticket]: false }));
+                    }}
+                    disabled={!hasChanges[position.ticket] || saving[position.ticket]}
+                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+                  >
+                    {saving[position.ticket] ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  <button
+                    onClick={() => closeSinglePosition(position.ticket)}
+                    disabled={closingPosition[position.ticket]}
+                    className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:opacity-50 transition-colors"
+                  >
+                    Close Position
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Error Display */}
-        {error && (
-          <div className="mb-6 bg-red-900/50 border border-red-700 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-300">Error loading positions</h3>
-                <div className="mt-2 text-sm text-red-400">{error}</div>
-              </div>
             </div>
           </div>
-        )}
+        );
+      })}
 
-        {/* Positions Table */}
-        <div className="bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-700">
-          {loading && positions.length === 0 ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2 text-gray-400">Loading positions...</p>
-            </div>
-          ) : positions.length === 0 ? (
-            <div className="p-8 text-center">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-300">No open positions</h3>
-              <p className="mt-1 text-sm text-gray-500">There are currently no active trading positions.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-700">
-                <thead className="bg-gray-700">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Position Info
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Prices & Profit
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-gray-800 divide-y divide-gray-700">
-                  {positions.map((position) => {
-                    const isExpanded = expandedPositions.has(position.ticket);
-                    return (
-                      <React.Fragment key={position.ticket}>
-                        {/* Main Position Row */}
-                        <tr 
-                          className="hover:bg-gray-700 transition-colors cursor-pointer"
-                          onClick={() => togglePositionExpansion(position.ticket)}
-                        >
-                          {/* Position Info */}
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-3">
-                              <div className={`transform transition-transform ${isExpanded ? 'rotate-90' : 'rotate-0'}`}>
-                                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                              </div>
-                              <div className="space-y-1">
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-sm font-medium text-white">#{position.ticket}</span>
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeBgColor(position.type)} ${getTypeColor(position.type)}`}>
-                                    {position.type.toUpperCase()}
-                                  </span>
-                                </div>
-                                <div className="text-sm text-white font-medium">{position.symbol}</div>
-                                <div className="text-sm text-gray-400">Volume: {position.volume}</div>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Prices & Profit */}
-                          <td className="px-6 py-4">
-                            <div className="space-y-1">
-                              <div className="text-sm">
-                                <span className="text-gray-400">Current:</span>
-                                <span className="ml-1 font-medium text-white">{position.price_current}</span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="text-gray-400">Profit:</span>
-                                <span className={`ml-1 font-medium ${getProfitColor(position.profit)}`}>
-                                  {formatCurrency(position.profit)}
-                                </span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="text-gray-400">Pips:</span>
-                                <span className={`ml-1 font-medium ${getProfitColor(position.profit)}`}>
-                                  {(() => {
-                                    const result = calculatePips(position);
-                                    console.log("Rendering pips for position", position.ticket, ":", result);
-                                    return result;
-                                  })()}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Status */}
-                          <td className="px-6 py-4">
-                            <div className="space-y-1">
-                              <div className="flex items-center space-x-2">
-                                <div className={`w-2 h-2 rounded-full ${position.profit_lock_enabled ? 'bg-blue-400' : 'bg-gray-500'}`}></div>
-                                <span className="text-xs text-gray-400">
-                                  {position.profit_lock_enabled ? 'Lock Active' : 'Lock Inactive'}
-                                </span>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <div className={`w-2 h-2 rounded-full ${position.profit_secure_enabled ? 'bg-green-400' : 'bg-gray-500'}`}></div>
-                                <span className="text-xs text-gray-400">
-                                  {position.profit_secure_enabled ? 'Secure Active' : 'Secure Inactive'}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Actions */}
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation(); // Prevent row expansion
-                                  closeSinglePosition(position.ticket);
-                                }}
-                                disabled={closingPosition[position.ticket]}
-                                className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs flex items-center space-x-1"
-                              >
-                                {closingPosition[position.ticket] ? (
-                                  <>
-                                    <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
-                                    <span>Closing...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                    <span>Close</span>
-                                  </>
-                                )}
-                              </button>
-                              <span className="text-xs text-gray-500">
-                                {isExpanded ? 'Click to hide' : 'Click to expand'}
-                              </span>
-                              {saving[position.ticket] && (
-                                <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-600"></div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* Expanded Details Row */}
-                        {isExpanded && (
-                          <tr className="bg-gray-750 border-t border-gray-600">
-                            <td colSpan={4} className="px-6 py-4">
-                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                {/* Detailed Prices */}
-                                <div className="space-y-3">
-                                  <h4 className="text-sm font-medium text-blue-400 border-b border-gray-600 pb-1">Price Details</h4>
-                                  <div className="space-y-2">
-                                    <div className="text-sm">
-                                      <span className="text-gray-400">Open Price:</span>
-                                      <span className="ml-1 font-medium text-white">{position.price_open}</span>
-                                    </div>
-                                    <div className="text-sm">
-                                      <span className="text-gray-400">Current Price:</span>
-                                      <span className="ml-1 font-medium text-white">{position.price_current}</span>
-                                    </div>
-                                    <div className="text-sm">
-                                      <span className="text-gray-400">Stop Loss:</span>
-                                      <span className="ml-1 font-medium text-white">{position.sl}</span>
-                                    </div>
-                                    <div className="text-sm">
-                                      <span className="text-gray-400">Take Profit:</span>
-                                      <span className="ml-1 font-medium text-white">{position.tp}</span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Profit Lock Settings */}
-                                <div className={`space-y-3 ${!position.profit_secure_enabled ? 'opacity-50 pointer-events-none' : ''}`}>
-                                  <h4 className="text-sm font-medium text-green-400 border-b border-gray-600 pb-1">Profit Lock</h4>
-                                  <div className="space-y-3">
-                                    <ToggleButton
-                                      checked={position.profit_lock_enabled}
-                                      onChange={(value) => handleProfitLockChange(position.ticket, 'profit_lock_enabled', value)}
-                                      label="Enabled"
-                                      disabled={saving[position.ticket] || !position.profit_secure_enabled}
-                                    />
-                                    <div>
-                                      <label className="block text-xs text-gray-400 mb-1">Start Pips</label>
-                                      <input
-                                        type="number"
-                                        value={getInputValue(position.ticket, 'profit_lock_start_pips', position.profit_lock_start_pips)}
-                                        onChange={(e) => handleInputChange(position.ticket, 'profit_lock_start_pips', e.target.value)}
-                                        onBlur={(e) => handleInputBlur(position.ticket, 'profit_lock_start_pips', e.target.value)}
-                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
-                                        min="0"
-                                        disabled={saving[position.ticket] || !position.profit_secure_enabled}
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs text-gray-400 mb-1">Distance Pips</label>
-                                      <input
-                                        type="number"
-                                        value={getInputValue(position.ticket, 'profit_lock_distance_pips', position.profit_lock_distance_pips)}
-                                        onChange={(e) => handleInputChange(position.ticket, 'profit_lock_distance_pips', e.target.value)}
-                                        onBlur={(e) => handleInputBlur(position.ticket, 'profit_lock_distance_pips', e.target.value)}
-                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
-                                        min="0"
-                                        disabled={saving[position.ticket] || !position.profit_secure_enabled}
-                                      />
-                                    </div>
-
-                                  </div>
-                                </div>
-
-                                {/* SL Trailing Settings */}
-                                <div className={`space-y-3 ${!position.profit_secure_enabled ? 'opacity-50 pointer-events-none' : ''}`}>
-                                  <h4 className="text-sm font-medium text-orange-400 border-b border-gray-600 pb-1">SL Trailing</h4>
-                                  <div className="space-y-3">
-                                    <ToggleButton
-                                      checked={position.sl_trailing_enabled}
-                                      onChange={(value) => handleSLTrailingChange(position.ticket, 'sl_trailing_enabled', value)}
-                                      label="Enabled"
-                                      disabled={saving[position.ticket] || !position.profit_secure_enabled}
-                                    />
-                                    <div>
-                                      <label className="block text-xs text-gray-400 mb-1">Start Pips</label>
-                                        <input
-                                          type="number"
-                                          value={getInputValue(position.ticket, 'sl_trailing_start_pips', position.sl_trailing_start_pips)}
-                                          onChange={(e) => handleInputChange(position.ticket, 'sl_trailing_start_pips', e.target.value)}
-                                          onBlur={(e) => handleInputBlur(position.ticket, 'sl_trailing_start_pips', e.target.value)}
-                                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
-                                          min="0"
-                                          disabled={saving[position.ticket] || !position.profit_secure_enabled}
-                                        />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs text-gray-400 mb-1">Distance Pips</label>
-                                        <input
-                                          type="number"
-                                          value={getInputValue(position.ticket, 'sl_trailing_distance_pips', position.sl_trailing_distance_pips)}
-                                          onChange={(e) => handleInputChange(position.ticket, 'sl_trailing_distance_pips', e.target.value)}
-                                          onBlur={(e) => handleInputBlur(position.ticket, 'sl_trailing_distance_pips', e.target.value)}
-                                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
-                                          min="0"
-                                          disabled={saving[position.ticket] || !position.profit_secure_enabled}
-                                        />
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Profit Secure Settings */}
-                                <div className="space-y-3">
-                                  <h4 className="text-sm font-medium text-purple-400 border-b border-gray-600 pb-1">Profit Secure</h4>
-                                  <div className="space-y-3">
-                                    <ToggleButton
-                                      checked={position.profit_secure_enabled}
-                                      onChange={(value) => handleProfitSecureChange(position.ticket, 'profit_secure_enabled', value)}
-                                      label="Enabled"
-                                      disabled={saving[position.ticket]}
-                                    />
-
-                                  </div>
-                                </div>
-
-                                {/* Set to Default Settings Button */}
-                                <div className="space-y-3">
-                                  <div className="pt-2">
-                                    <button
-                                      onClick={() => applyDefaultSettings(position.ticket)}
-                                      disabled={saving[position.ticket] || applyingDefaults[position.ticket]}
-                                      className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-sm font-medium rounded-md transition-colors duration-200 flex items-center justify-center space-x-2"
-                                    >
-                                      {applyingDefaults[position.ticket] ? (
-                                        <>
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b border-white"></div>
-                                          <span>Applying...</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                          </svg>
-                                          <span>Set to Default Settings</span>
-                                        </>
-                                      )}
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Additional Details */}
-                              <div className="mt-4 pt-4 border-t border-gray-600">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                                  <div>
-                                    <span className="text-gray-400">Magic Number:</span>
-                                    <span className="ml-1 font-medium text-white">{position.magic}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-400">Opened:</span>
-                                    <span className="ml-1 text-gray-300">{position.open_time ? formatDateTime(position.open_time) : 'N/A'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-400">Last Updated:</span>
-                                    <span className="ml-1 text-gray-300">{formatDateTime(position.last_updated)}</span>
-                                  </div>
-                                </div>
-                                {position.comment && (
-                                  <div className="mt-2 text-sm">
-                                    <span className="text-gray-400">Comment:</span>
-                                    <span className="ml-1 text-gray-300">{position.comment}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+      {/* Success/Error Messages */}
+      {closeMessage && (
+        <div className={`fixed bottom-4 left-4 right-4 p-3 rounded-lg shadow-lg z-50 ${
+          closeMessage.includes('Error') 
+            ? 'bg-red-600 text-white' 
+            : 'bg-green-600 text-white'
+        }`}>
+          {closeMessage}
         </div>
-
-        {/* Summary Stats */}
-        {positions.length > 0 && (
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
-              <div className="text-sm font-medium text-gray-400">Total Positions</div>
-              <div className="text-2xl font-bold text-white">{positions.length}</div>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
-              <div className="text-sm font-medium text-gray-400">Total Profit</div>
-              <div className={`text-2xl font-bold ${getProfitColor(positions.reduce((sum, pos) => sum + pos.profit, 0))}`}>
-                {formatCurrency(positions.reduce((sum, pos) => sum + pos.profit, 0))}
-              </div>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
-              <div className="text-sm font-medium text-gray-400">Avg Pips</div>
-              <div className="text-2xl font-bold text-white">
-                {positions.length > 0 ? (positions.reduce((sum, pos) => {
-                  const currentPrice = typeof pos.price_current === 'string' ? parseFloat(pos.price_current) : pos.price_current;
-                  const openPrice = typeof pos.price_open === 'string' ? parseFloat(pos.price_open) : pos.price_open;
-                  
-                  if (isNaN(currentPrice) || isNaN(openPrice)) {
-                    return sum;
-                  }
-                  
-                  const symbolConfig = symbolSettings.find(s => s.symbol === pos.symbol);
-                  if (!symbolConfig || symbolConfig.price2pips === 0) {
-                    // Use fallback calculation
-                    const pipValue = pos.symbol.includes('XAU') ? 0.1 : 0.0001;
-                    const priceDifference = Math.abs(currentPrice - openPrice);
-                    return sum + (priceDifference / pipValue);
-                  }
-                  
-                  const priceDifference = Math.abs(currentPrice - openPrice);
-                  return sum + (priceDifference * symbolConfig.price2pips);
-                }, 0) / positions.length).toFixed(1) : '0.0'}
-              </div>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-700">
-              <div className="text-sm font-medium text-gray-400">Total Volume</div>
-              <div className="text-2xl font-bold text-white">
-                {positions.reduce((sum, pos) => sum + pos.volume, 0).toFixed(2)}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

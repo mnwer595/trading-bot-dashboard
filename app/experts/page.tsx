@@ -29,6 +29,7 @@ type Expert = {
   volume_keep: number;
   last_signal: string;
   scheduled_trading_enabled: boolean;
+  risk_management_enabled: boolean;
   working_hours: {
     monday: WorkingHours;
     tuesday: WorkingHours;
@@ -77,6 +78,7 @@ export default function ExpertsPage() {
       "multi-actions": expert["multi-actions"] !== undefined ? expert["multi-actions"] : expert.multi_actions || false,
       "multi-tp": expert["multi-tp"] !== undefined ? expert["multi-tp"] : expert.multi_tp || false,
       scheduled_trading_enabled: expert.scheduled_trading_enabled || false,
+      risk_management_enabled: expert.risk_management_enabled !== undefined ? expert.risk_management_enabled : false,
       working_hours: expert.working_hours || defaultWorkingHours,
     } as Expert;
   };
@@ -376,6 +378,7 @@ export default function ExpertsPage() {
       volume_keep: 0,
       last_signal: "buy",
       scheduled_trading_enabled: false,
+      risk_management_enabled: false,
       working_hours: {
         monday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
         tuesday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
@@ -846,6 +849,12 @@ export default function ExpertsPage() {
                             checked={expert.signal_in_same_direction}
                             onChange={(value) => handleExpertChange(expert.name, 'signal_in_same_direction', value)}
                             label="Signal in Same Direction"
+                          />
+
+                    <ToggleButton
+                            checked={expert.risk_management_enabled}
+                            onChange={(value) => handleExpertChange(expert.name, 'risk_management_enabled', value)}
+                            label="Risk Management"
                           />
                         </div>
 
