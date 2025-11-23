@@ -30,6 +30,15 @@ type Expert = {
   last_signal: string;
   scheduled_trading_enabled: boolean;
   risk_management_enabled: boolean;
+  use_custom_risk_options: boolean;
+  default_sl_pips: number;
+  sl_trailing_enabled: boolean;
+  sl_trailing_start_pips: number;
+  sl_trailing_distance_pips: number;
+  profit_lock_enabled: boolean;
+  profit_lock_start_pips: number;
+  profit_lock_distance_pips: number;
+  profit_secure_enabled: boolean;
   working_hours: {
     monday: WorkingHours;
     tuesday: WorkingHours;
@@ -79,6 +88,15 @@ export default function ExpertsPage() {
       "multi-tp": expert["multi-tp"] !== undefined ? expert["multi-tp"] : expert.multi_tp || false,
       scheduled_trading_enabled: expert.scheduled_trading_enabled || false,
       risk_management_enabled: expert.risk_management_enabled !== undefined ? expert.risk_management_enabled : false,
+      use_custom_risk_options: expert.use_custom_risk_options !== undefined ? expert.use_custom_risk_options : false,
+      default_sl_pips: expert.default_sl_pips !== undefined ? expert.default_sl_pips : 20,
+      sl_trailing_enabled: expert.sl_trailing_enabled !== undefined ? expert.sl_trailing_enabled : false,
+      sl_trailing_start_pips: expert.sl_trailing_start_pips !== undefined ? expert.sl_trailing_start_pips : 10,
+      sl_trailing_distance_pips: expert.sl_trailing_distance_pips !== undefined ? expert.sl_trailing_distance_pips : 5,
+      profit_lock_enabled: expert.profit_lock_enabled !== undefined ? expert.profit_lock_enabled : false,
+      profit_lock_start_pips: expert.profit_lock_start_pips !== undefined ? expert.profit_lock_start_pips : 15,
+      profit_lock_distance_pips: expert.profit_lock_distance_pips !== undefined ? expert.profit_lock_distance_pips : 10,
+      profit_secure_enabled: expert.profit_secure_enabled !== undefined ? expert.profit_secure_enabled : true,
       working_hours: expert.working_hours || defaultWorkingHours,
     } as Expert;
   };
@@ -379,6 +397,15 @@ export default function ExpertsPage() {
       last_signal: "buy",
       scheduled_trading_enabled: false,
       risk_management_enabled: false,
+      use_custom_risk_options: false,
+      default_sl_pips: 20,
+      sl_trailing_enabled: false,
+      sl_trailing_start_pips: 10,
+      sl_trailing_distance_pips: 5,
+      profit_lock_enabled: false,
+      profit_lock_start_pips: 15,
+      profit_lock_distance_pips: 10,
+      profit_secure_enabled: true,
       working_hours: {
         monday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
         tuesday: { enabled: true, periods: [{ start: "08:00", end: "18:00" }] },
@@ -857,6 +884,109 @@ export default function ExpertsPage() {
                             label="Risk Management"
                           />
                         </div>
+
+                        {/* Risk Management Options */}
+                        {expert.risk_management_enabled && (
+                          <div className="space-y-3 bg-gray-750 p-3 rounded-md">
+                            <h4 className="text-sm font-medium text-yellow-400 border-b border-gray-700 pb-1">Risk Management Options</h4>
+                            
+                            <ToggleButton
+                              checked={expert.use_custom_risk_options}
+                              onChange={(value) => handleExpertChange(expert.name, 'use_custom_risk_options', value)}
+                              label="Use Custom Risk Options"
+                            />
+
+                            {expert.use_custom_risk_options && (
+                              <>
+                                <div className="flex items-center justify-between">
+                                  <label className="text-sm text-gray-300">Default SL (Pips)</label>
+                                  <input
+                                    type="number"
+                                    value={expert.default_sl_pips}
+                                    onChange={(e) => handleExpertChange(expert.name, 'default_sl_pips', parseFloat(e.target.value) || 0)}
+                                    className="w-32 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                                    min="0"
+                                    step="1"
+                                  />
+                                </div>
+
+                                <ToggleButton
+                                  checked={expert.sl_trailing_enabled}
+                                  onChange={(value) => handleExpertChange(expert.name, 'sl_trailing_enabled', value)}
+                                  label="SL Trailing Enabled"
+                                />
+
+                                {expert.sl_trailing_enabled && (
+                                  <>
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-sm text-gray-300">SL Trailing Start (Pips)</label>
+                                      <input
+                                        type="number"
+                                        value={expert.sl_trailing_start_pips}
+                                        onChange={(e) => handleExpertChange(expert.name, 'sl_trailing_start_pips', parseFloat(e.target.value) || 0)}
+                                        className="w-32 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                                        min="0"
+                                        step="1"
+                                      />
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-sm text-gray-300">SL Trailing Distance (Pips)</label>
+                                      <input
+                                        type="number"
+                                        value={expert.sl_trailing_distance_pips}
+                                        onChange={(e) => handleExpertChange(expert.name, 'sl_trailing_distance_pips', parseFloat(e.target.value) || 0)}
+                                        className="w-32 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                                        min="0"
+                                        step="1"
+                                      />
+                                    </div>
+                                  </>
+                                )}
+
+                                <ToggleButton
+                                  checked={expert.profit_lock_enabled}
+                                  onChange={(value) => handleExpertChange(expert.name, 'profit_lock_enabled', value)}
+                                  label="Profit Lock Enabled"
+                                />
+
+                                {expert.profit_lock_enabled && (
+                                  <>
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-sm text-gray-300">Profit Lock Start (Pips)</label>
+                                      <input
+                                        type="number"
+                                        value={expert.profit_lock_start_pips}
+                                        onChange={(e) => handleExpertChange(expert.name, 'profit_lock_start_pips', parseFloat(e.target.value) || 0)}
+                                        className="w-32 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                                        min="0"
+                                        step="1"
+                                      />
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-sm text-gray-300">Profit Lock Distance (Pips)</label>
+                                      <input
+                                        type="number"
+                                        value={expert.profit_lock_distance_pips}
+                                        onChange={(e) => handleExpertChange(expert.name, 'profit_lock_distance_pips', parseFloat(e.target.value) || 0)}
+                                        className="w-32 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                                        min="0"
+                                        step="1"
+                                      />
+                                    </div>
+                                  </>
+                                )}
+
+                                <ToggleButton
+                                  checked={expert.profit_secure_enabled}
+                                  onChange={(value) => handleExpertChange(expert.name, 'profit_secure_enabled', value)}
+                                  label="Profit Secure Enabled"
+                                />
+                              </>
+                            )}
+                          </div>
+                        )}
 
                         {/* Take Profit Settings */}
                         <div className="space-y-3">

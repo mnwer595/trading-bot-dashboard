@@ -10,6 +10,7 @@ const SAVE_POSITIONS_URL = `${API_URL}/savepositions`;
 const SYNC_POSITIONS_URL = `${API_URL}/syncpositions`;
 
 const CLOSE_POSITION_URL = `${API_URL}/close`;
+const MODIFY_POSITION_URL = `${API_URL}/modify`;
 
 type Position = {
   ticket: number;
@@ -74,6 +75,8 @@ export default function PositionsPage() {
   const [showProfitSettings, setShowProfitSettings] = useState<{ [ticket: number]: boolean }>({});
   const [showPositionModal, setShowPositionModal] = useState<{ [ticket: number]: boolean }>({});
   const [hasChanges, setHasChanges] = useState<{ [ticket: number]: boolean }>({});
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(true);
+  const [manualRefreshing, setManualRefreshing] = useState<boolean>(false);
 
   const getInputValue = (ticket: number, field: string, defaultValue: number): string => {
     const key = `${ticket}-${field}`;
@@ -357,22 +360,35 @@ export default function PositionsPage() {
           
           if (syncResponse.ok) {
             const syncData = await syncResponse.json();
-            const syncPositionsData = Array.isArray(syncData) ? syncData : syncData.positions || syncData.data || [];
-            console.log("Positions data after sync:", syncPositionsData);
-            
-            // Use the synced data
-            const processedPositions = syncPositionsData.map((pos: any) => ({
-              ...pos,
-              // Ensure boolean fields are properly typed with defaults for missing fields
-              sl_trailing_enabled: pos.sl_trailing_enabled !== undefined ? Boolean(pos.sl_trailing_enabled) : false,
-              profit_secure_enabled: pos.profit_secure_enabled !== undefined ? Boolean(pos.profit_secure_enabled) : false,
-              profit_lock_enabled: pos.profit_lock_enabled !== undefined ? Boolean(pos.profit_lock_enabled) : false,
-              // Ensure numeric fields are properly typed with defaults for missing fields
-              sl_trailing_start_pips: pos.sl_trailing_start_pips !== undefined ? Number(pos.sl_trailing_start_pips) : 0,
-              sl_trailing_distance_pips: pos.sl_trailing_distance_pips !== undefined ? Number(pos.sl_trailing_distance_pips) : 10,
-              profit_lock_start_pips: pos.profit_lock_start_pips !== undefined ? Number(pos.profit_lock_start_pips) : 0,
-              profit_lock_distance_pips: pos.profit_lock_distance_pips !== 0 ? Number(pos.profit_lock_distance_pips) : 0
-            }));
+          const syncPositionsData = Array.isArray(syncData) ? syncData : syncData.positions || syncData.data || [];
+          console.log("Positions data after sync:", syncPositionsData);
+          
+          // Use the synced data
+          const processedPositions = syncPositionsData.map((pos: any) => ({
+            ...pos,
+            // Core numeric fields aligned with API payload
+            price_open: pos.price_open !== undefined ? Number(pos.price_open) : Number(pos.entry_price ?? 0),
+            price_current: pos.price_current !== undefined ? Number(pos.price_current) : Number(pos.current_price ?? 0),
+            profit: pos.profit !== undefined ? Number(pos.profit) : 0,
+            sl: pos.sl !== undefined ? Number(pos.sl) : 0,
+            tp: pos.tp !== undefined ? Number(pos.tp) : 0,
+            swap: pos.swap !== undefined ? Number(pos.swap) : 0,
+            lock_profit_points: pos.lock_profit_points !== undefined ? Number(pos.lock_profit_points) : 0,
+            profit_secure_start_points: pos.profit_secure_start_points !== undefined ? Number(pos.profit_secure_start_points) : 0,
+            profit_lock_start_points: pos.profit_lock_start_points !== undefined ? Number(pos.profit_lock_start_points) : 0,
+            profit_lock_distance: pos.profit_lock_distance !== undefined ? Number(pos.profit_lock_distance) : 0,
+            // Ensure boolean fields are properly typed with defaults for missing fields
+            sl_trailing_enabled: pos.sl_trailing_enabled !== undefined ? Boolean(pos.sl_trailing_enabled) : false,
+            profit_secure_enabled: pos.profit_secure_enabled !== undefined ? Boolean(pos.profit_secure_enabled) : false,
+            profit_lock_enabled: pos.profit_lock_enabled !== undefined ? Boolean(pos.profit_lock_enabled) : false,
+            // Ensure numeric fields are properly typed with defaults for missing fields
+            sl_trailing_start_pips: pos.sl_trailing_start_pips !== undefined ? Number(pos.sl_trailing_start_pips) : 0,
+            sl_trailing_distance_pips: pos.sl_trailing_distance_pips !== undefined ? Number(pos.sl_trailing_distance_pips) : 20,
+            profit_lock_start_pips: pos.profit_lock_start_pips !== undefined ? Number(pos.profit_lock_start_pips) : 0,
+            profit_lock_distance_pips: pos.profit_lock_distance_pips !== undefined
+              ? Number(pos.profit_lock_distance_pips)
+              : Number(pos.profit_lock_distance ?? 0),
+          }));
             
             processedPositions.forEach((pos: any) => {
               console.log(`Position ${pos.ticket} SL trailing after sync:`, {
@@ -395,22 +411,35 @@ export default function PositionsPage() {
       // Log SL trailing values for each position and ensure proper data types
       const processedPositions = positionsData.map((pos: any) => {
         console.log("Processing position:", pos.ticket, {
-          price_current: pos.price_current,
-          price_open: pos.price_open,
+          price_current: pos.price_current ?? pos.current_price,
+          price_open: pos.price_open ?? pos.entry_price,
           symbol: pos.symbol
         });
         
         return {
           ...pos,
+          // Core numeric fields aligned with API payload
+          price_open: pos.price_open !== undefined ? Number(pos.price_open) : Number(pos.entry_price ?? 0),
+          price_current: pos.price_current !== undefined ? Number(pos.price_current) : Number(pos.current_price ?? 0),
+          profit: pos.profit !== undefined ? Number(pos.profit) : 0,
+          sl: pos.sl !== undefined ? Number(pos.sl) : 0,
+          tp: pos.tp !== undefined ? Number(pos.tp) : 0,
+          swap: pos.swap !== undefined ? Number(pos.swap) : 0,
+          lock_profit_points: pos.lock_profit_points !== undefined ? Number(pos.lock_profit_points) : 0,
+          profit_secure_start_points: pos.profit_secure_start_points !== undefined ? Number(pos.profit_secure_start_points) : 0,
+          profit_lock_start_points: pos.profit_lock_start_points !== undefined ? Number(pos.profit_lock_start_points) : 0,
+          profit_lock_distance: pos.profit_lock_distance !== undefined ? Number(pos.profit_lock_distance) : 0,
           // Ensure boolean fields are properly typed with defaults for missing fields
           sl_trailing_enabled: pos.sl_trailing_enabled !== undefined ? Boolean(pos.sl_trailing_enabled) : false,
-        profit_secure_enabled: pos.profit_secure_enabled !== undefined ? Boolean(pos.profit_secure_enabled) : false,
-        profit_lock_enabled: pos.profit_lock_enabled !== undefined ? Boolean(pos.profit_lock_enabled) : false,
-        // Ensure numeric fields are properly typed with defaults for missing fields
-        sl_trailing_start_pips: pos.sl_trailing_start_pips !== undefined ? Number(pos.sl_trailing_start_pips) : 0,
-        sl_trailing_distance_pips: pos.sl_trailing_distance_pips !== undefined ? Number(pos.sl_trailing_distance_pips) : 10,
-        profit_lock_start_pips: pos.profit_lock_start_pips !== undefined ? Number(pos.profit_lock_start_pips) : 0,
-        profit_lock_distance_pips: pos.profit_lock_distance_pips !== 0 ? Number(pos.profit_lock_distance_pips) : 0
+          profit_secure_enabled: pos.profit_secure_enabled !== undefined ? Boolean(pos.profit_secure_enabled) : false,
+          profit_lock_enabled: pos.profit_lock_enabled !== undefined ? Boolean(pos.profit_lock_enabled) : false,
+          // Ensure numeric fields are properly typed with defaults for missing fields
+          sl_trailing_start_pips: pos.sl_trailing_start_pips !== undefined ? Number(pos.sl_trailing_start_pips) : 0,
+          sl_trailing_distance_pips: pos.sl_trailing_distance_pips !== undefined ? Number(pos.sl_trailing_distance_pips) : 20,
+          profit_lock_start_pips: pos.profit_lock_start_pips !== undefined ? Number(pos.profit_lock_start_pips) : 0,
+          profit_lock_distance_pips: pos.profit_lock_distance_pips !== undefined
+            ? Number(pos.profit_lock_distance_pips)
+            : Number(pos.profit_lock_distance ?? 0)
         };
       });
       
@@ -631,22 +660,43 @@ export default function PositionsPage() {
   };
 
   useEffect(() => {
-    // Initial fetch
+    let isCancelled = false;
+
+    const runFetchLoop = async () => {
+      if (isCancelled || !autoRefreshEnabled) {
+        return;
+      }
+
+      // Determine if any modal is open at the time of the request
+      const isAnyModalOpen = Object.values(showPositionModal).some(Boolean);
+
+      // Fetch positions, preserving settings only when a modal is open
+      await fetchPositions(isAnyModalOpen);
+
+      if (isCancelled || !autoRefreshEnabled) {
+        return;
+      }
+
+      // Wait 3 seconds after the response before the next request
+      setTimeout(() => {
+        runFetchLoop();
+      }, 3000);
+    };
+
+    // Initial fetches
     fetchPositions();
     fetchSymbolSettings();
 
-    // Check if any modal is open
-    const isAnyModalOpen = Object.values(showPositionModal).some(Boolean);
-    
-    // Set up auto-refresh every 3 seconds
-    const interval = setInterval(() => {
-      // If modal is open, preserve settings when fetching
-      fetchPositions(isAnyModalOpen);
-    }, 3000);
-    
-    // Cleanup interval on component unmount
-    return () => clearInterval(interval);
-  }, [selectedAccount, showPositionModal]);
+    // Start the loop only when auto refresh is enabled
+    if (autoRefreshEnabled) {
+      runFetchLoop();
+    }
+
+    // Cleanup on unmount or dependency change
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedAccount, showPositionModal, autoRefreshEnabled]);
 
   // Separate effect for account settings to avoid calling when selectedAccount is not set
   useEffect(() => {
@@ -704,6 +754,63 @@ export default function PositionsPage() {
     }
   };
 
+  const handleRemoveSL = async (ticket: number) => {
+    try {
+      const url = new URL(MODIFY_POSITION_URL);
+      url.searchParams.append("account_id", selectedAccount);
+
+      const payload = {
+        ticket,
+        sl: 0,
+      };
+
+      const response = await fetch(url.toString(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        mode: "cors",
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Error removing SL:", errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Update local state
+      setPositions((prev) =>
+        prev.map((pos) =>
+          pos.ticket === ticket ? { ...pos, sl: 0 } : pos
+        )
+      );
+
+      // Optional: refresh from server to ensure full sync
+      const isAnyModalOpen = Object.values(showPositionModal).some(Boolean);
+      await fetchPositions(isAnyModalOpen);
+    } catch (err) {
+      console.error("Error in handleRemoveSL:", err);
+      setError("Failed to remove SL");
+    }
+  };
+
+  const handleManualRefresh = async () => {
+    try {
+      setManualRefreshing(true);
+
+      const isAnyModalOpen = Object.values(showPositionModal).some(Boolean);
+
+      // Preserve settings when a modal is open, same behavior as auto-refresh
+      await fetchPositions(isAnyModalOpen);
+      await fetchSymbolSettings();
+    } catch (err) {
+      console.error("Error during manual refresh:", err);
+    } finally {
+      setManualRefreshing(false);
+    }
+  };
+
   const initializeTradingOrder = (symbol: string) => {
     const symbolConfig = symbolSettings.find(s => s.symbol === symbol);
     const defaultVolume = symbolConfig?.default_lot_size || 0.01;
@@ -757,8 +864,7 @@ export default function PositionsPage() {
         symbol: symbol,
         order_type: finalOrderType,
         volume: parseFloat(order.volume),
-        price: 0, // Market order
-        comment: `Manual ${finalOrderType} from dashboard`
+        price: 0 // Market order
       };
 
       console.log("Placing trade:", tradeData);
@@ -938,6 +1044,20 @@ export default function PositionsPage() {
     return "text-gray-400";
   };
 
+  const formatNumber = (value: number | string | null | undefined, decimals: number) => {
+    if (value === null || value === undefined) {
+      return "N/A";
+    }
+
+    const numericValue = typeof value === "string" ? parseFloat(value) : value;
+
+    if (Number.isNaN(numericValue)) {
+      return "N/A";
+    }
+
+    return numericValue.toFixed(decimals);
+  };
+
   const calculatePips = (position: Position) => {
     console.log("=== CALCULATING PIPS ===");
     console.log("Position:", position.ticket, position.symbol);
@@ -1076,10 +1196,52 @@ export default function PositionsPage() {
         
         {/* Total P/L Display */}
         <div className="flex items-center justify-between mb-3">
-          <span className="text-gray-400 text-sm">Total P/L:</span>
-          <span className={`text-2xl font-bold ${getProfitColor(positions.reduce((sum, pos) => sum + pos.profit, 0))}`}>
-            {formatCurrency(positions.reduce((sum, pos) => sum + pos.profit, 0))}
-          </span>
+          <div className="flex flex-col">
+            <span className="text-gray-400 text-sm">Total P/L:</span>
+            <span className={`text-2xl font-bold ${getProfitColor(positions.reduce((sum, pos) => sum + pos.profit, 0))}`}>
+              {formatCurrency(positions.reduce((sum, pos) => sum + pos.profit, 0))}
+            </span>
+          </div>
+
+          <div className="flex flex-col items-end space-y-2">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-gray-400">Auto Refresh</span>
+              <button
+                onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+                className={`w-10 h-6 rounded-full flex items-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  autoRefreshEnabled ? "bg-blue-600" : "bg-gray-600"
+                }`}
+                aria-label="Toggle auto refresh"
+                tabIndex={0}
+              >
+                <span
+                  className={`inline-block w-4 h-4 rounded-full bg-white shadow transform transition-transform ${
+                    autoRefreshEnabled ? "translate-x-5" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <button
+              onClick={handleManualRefresh}
+              disabled={manualRefreshing}
+              className="px-3 py-1 rounded-md text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50 flex items-center space-x-1"
+            >
+              {manualRefreshing ? (
+                <>
+                  <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Refreshing...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M5 19A9 9 0 0119 5" />
+                  </svg>
+                  <span>Refresh</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
         
         <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
@@ -1268,13 +1430,13 @@ export default function PositionsPage() {
                         
                         {/* Prices */}
                         <div className="text-sm text-gray-400">
-                          {position.price_open.toFixed(5)} → {position.price_current.toFixed(5)}
+                          {formatNumber(position.price_open as any, 5)} → {formatNumber(position.price_current as any, 5)}
                         </div>
                         
                         {/* Profit and Pips */}
                         <div className="flex items-center space-x-3 mt-1">
                           <span className={`text-base font-semibold ${getProfitColor(position.profit)}`}>
-                            {position.profit.toFixed(2)}
+                            {formatNumber(position.profit as any, 2)}
                           </span>
                           <span className="text-sm text-gray-500">
                             {pips} pips
@@ -1316,18 +1478,18 @@ export default function PositionsPage() {
                         <div className="grid grid-cols-2 gap-3 text-sm">
                           <div>
                             <span className="text-gray-500">S/L: </span>
-                            <span className="font-medium text-gray-300">{position.sl.toFixed(5)}</span>
+                            <span className="font-medium text-gray-300">{formatNumber(position.sl as any, 5)}</span>
                           </div>
                           <div>
                             <span className="text-gray-500">T/P: </span>
-                            <span className="font-medium text-gray-300">{position.tp.toFixed(5)}</span>
+                            <span className="font-medium text-gray-300">{formatNumber(position.tp as any, 5)}</span>
                           </div>
                         </div>
                         
                         {position.swap !== undefined && (
                           <div className="text-sm">
                             <span className="text-gray-500">Swap: </span>
-                            <span className="font-medium text-gray-300">{position.swap.toFixed(2)}</span>
+                            <span className="font-medium text-gray-300">{formatNumber(position.swap as any, 2)}</span>
                           </div>
                         )}
 
@@ -1445,24 +1607,34 @@ export default function PositionsPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Open Price</p>
-                      <p className="text-white font-medium">{position.price_open.toFixed(5)}</p>
+                      <p className="text-white font-medium">{formatNumber(position.price_open as any, 5)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Current Price</p>
-                      <p className="text-white font-medium">{position.price_current.toFixed(5)}</p>
+                      <p className="text-white font-medium">{formatNumber(position.price_current as any, 5)}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-400">S/L</p>
-                      <p className="text-white font-medium">{position.sl.toFixed(5)}</p>
+                      <div className="flex items-center justify-between space-x-2">
+                        <div>
+                          <p className="text-sm text-gray-400">S/L</p>
+                          <p className="text-white font-medium">{formatNumber(position.sl as any, 5)}</p>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveSL(position.ticket)}
+                          className="mt-4 px-2 py-1 text-xs rounded bg-red-600 hover:bg-red-700 text-white"
+                        >
+                          Remove SL
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">T/P</p>
-                      <p className="text-white font-medium">{position.tp.toFixed(5)}</p>
+                      <p className="text-white font-medium">{formatNumber(position.tp as any, 5)}</p>
                     </div>
                     {position.swap !== undefined && (
                       <div>
-                        <p className="text-sm text-gray-400">Swap</p>
-                        <p className="text-white font-medium">{position.swap.toFixed(2)}</p>
+                      <p className="text-sm text-gray-400">Swap</p>
+                      <p className="text-white font-medium">{formatNumber(position.swap as any, 2)}</p>
                       </div>
                     )}
                     {position.magic && (
