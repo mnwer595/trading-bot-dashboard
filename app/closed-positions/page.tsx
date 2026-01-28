@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-const API_URL = "http://198.23.206.54";
+const API_URL = "https://144.91.88.10:80";
 
 type ClosedPosition = {
   ticket: number;
