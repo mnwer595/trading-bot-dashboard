@@ -8,7 +8,7 @@ const API_URL = "https://144.91.88.10";
 const GET_EXPERTS_URL = `${API_URL}/getexperts`;
 const SAVE_EXPERTS_URL = `${API_URL}/saveexperts`;
 
-type WorkingHours = {
+type WorkingHours = { 
   enabled: boolean;
   periods: Array<{
     start: string;
