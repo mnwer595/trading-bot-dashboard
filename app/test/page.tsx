@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-const API_URL = "https://144.91.88.10:80";
+const API_URL = "https://144.91.88.10";
 
 export default function TestPage() {
   const [results, setResults] = useState<any[]>([]);
