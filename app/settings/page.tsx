@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import AccountSelector from "../components/AccountSelector";
 
-const API_URL = "https://144.91.88.10";
+const API_URL = "https://trading-mnwer-api.space";
 const GET_SETTINGS_URL = `${API_URL}/getsettings`;
 const SAVE_SETTINGS_URL = `${API_URL}/savesettings`;
 

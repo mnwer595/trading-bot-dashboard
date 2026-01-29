@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import AccountSelector from "../components/AccountSelector";
 
-const API_URL = "https://144.91.88.10";
+const API_URL = "https://trading-mnwer-api.space";
 
 type AIModel = {
   enabled: boolean;
