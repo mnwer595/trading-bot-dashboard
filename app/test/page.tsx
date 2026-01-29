@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-const API_URL = "https://trading-mnwer-api.space";
+import { API_URL } from "@/lib/config";
 
 export default function TestPage() {
   const [results, setResults] = useState<any[]>([]);

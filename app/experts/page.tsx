@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import AccountSelector from "../components/AccountSelector";
-
-const API_URL = "https://trading-mnwer-api.space";
+import { API_URL } from "@/lib/config";
 const GET_EXPERTS_URL = `${API_URL}/getexperts`;
 const SAVE_EXPERTS_URL = `${API_URL}/saveexperts`;
 

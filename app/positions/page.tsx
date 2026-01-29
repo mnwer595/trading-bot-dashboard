@@ -3,8 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import AccountSelector from "../components/AccountSelector";
-
-const API_URL = "https://trading-mnwer-api.space";
+import { API_URL } from "@/lib/config";
 const GET_POSITIONS_URL = `${API_URL}/getpositions`;
 const SAVE_POSITIONS_URL = `${API_URL}/savepositions`;
 const SYNC_POSITIONS_URL = `${API_URL}/syncpositions`;
